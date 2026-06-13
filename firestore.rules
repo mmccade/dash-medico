@@ -1,0 +1,46 @@
+rules_version = '2';
+
+// ============================================================
+// SECURITY RULES — Murev Acompanha
+// ------------------------------------------------------------
+// Cole estas regras em:
+//   Firebase Console > Firestore Database > Regras
+// ------------------------------------------------------------
+// O que elas garantem:
+//  - Cada médico só lê/escreve os PRÓPRIOS dados e pacientes.
+//  - Ninguém acessa dados de outro médico.
+//  - O admin (seu email) pode LER todos os usuários (para o painel).
+//  - Só o próprio admin é reconhecido pelo email cadastrado.
+// ============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Troque pelo seu email de admin se mudar
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email == 'souzasoaresgabrie9@gmail.com';
+    }
+
+    function isDono(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    // Documento de perfil do usuário: usuarios/{uid}
+    match /usuarios/{uid} {
+      // O dono lê e escreve o próprio perfil. O admin pode ler todos
+      // e atualizar o plano (para o painel administrativo).
+      allow read: if isDono(uid) || isAdmin();
+      allow create: if isDono(uid);
+      allow update: if isDono(uid) || isAdmin();
+      allow delete: if false;
+
+      // Subcoleção de pacientes: usuarios/{uid}/pacientes/{pid}
+      // Apenas o dono acessa. Nem o admin lê pacientes de terceiros
+      // (o painel só precisa de perfis/planos, não de dados clínicos).
+      match /pacientes/{pid} {
+        allow read, write: if isDono(uid);
+      }
+    }
+  }
+}
