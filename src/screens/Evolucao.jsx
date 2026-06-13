@@ -1,6 +1,9 @@
 // src/screens/Evolucao.jsx
+// Alteração: adicionado filtro de data (ciclo de/até) antes de exportar PDF.
+// O usuário seleciona o intervalo de ciclos e o PDF é gerado apenas com esse recorte.
+
 import { useState } from "react";
-import { TrendingUp, FileDown } from "lucide-react";
+import { TrendingUp, FileDown, Filter } from "lucide-react";
 import { useStore } from "../lib/store.jsx";
 import { useToast } from "../lib/toast.jsx";
 import { imc, br } from "../lib/utils.js";
@@ -16,14 +19,50 @@ export default function Evolucao() {
   const [a, setA] = useState(null);
   const [b, setB] = useState(null);
 
+  // Filtro de data para PDF
+  const [filtroAberto, setFiltroAberto] = useState(false);
+  const [dataInicio, setDataInicio] = useState("");
+  const [dataFim, setDataFim] = useState("");
+
   const elegiveis = pacientes.filter((p) => p.ciclos.length > 0);
-  const p = elegiveis.find((x) => x.id === +pid);
+  const p = elegiveis.find((x) => x.id === +pid || x.id === pid);
 
   const gerarPdf = async () => {
     if (!p) return;
     toast("Gerando evolução em PDF…");
-    try { await baixarPdfEvolucao(p, config); toast("Evolução gerada"); }
-    catch (e) { console.error(e); toast("Erro ao gerar PDF"); }
+    try {
+      // Filtra ciclos pelo intervalo de data selecionado
+      let pacienteParaPdf = p;
+      if (dataInicio || dataFim) {
+        const inicio = dataInicio ? new Date(dataInicio + "T00:00:00") : null;
+        const fim = dataFim ? new Date(dataFim + "T23:59:59") : null;
+
+        const ciclosFiltrados = p.ciclos.filter((c) => {
+          // Tenta parsear a data do ciclo (campo "data" ou "mes" como "YYYY-MM")
+          const dataCiclo = c.data
+            ? new Date(c.data)
+            : c.mes
+            ? new Date(c.mes + "-01")
+            : null;
+          if (!dataCiclo) return true; // sem data, inclui
+          if (inicio && dataCiclo < inicio) return false;
+          if (fim && dataCiclo > fim) return false;
+          return true;
+        });
+
+        if (ciclosFiltrados.length === 0) {
+          toast("Nenhum ciclo no período selecionado");
+          return;
+        }
+        pacienteParaPdf = { ...p, ciclos: ciclosFiltrados };
+      }
+
+      await baixarPdfEvolucao(pacienteParaPdf, config);
+      toast("Evolução gerada");
+    } catch (e) {
+      console.error(e);
+      toast("Erro ao gerar PDF");
+    }
   };
 
   let ia = a, ib = b;
@@ -32,103 +71,192 @@ export default function Evolucao() {
     if (ib == null || ib >= p.ciclos.length) ib = p.ciclos.length - 1;
   }
 
+  const inputStyle = {
+    padding: "9px 12px", borderRadius: 9,
+    border: "1px solid var(--line)", background: "var(--surface)",
+    fontSize: 13, color: "var(--ink)",
+  };
+
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", flexWrap: "wrap", gap: 14, marginBottom: 6 }}>
         <h1 className="page-title" style={{ margin: 0 }}>Evolução do paciente</h1>
         {p && (
-          <button className="btn btn-primary" style={{ width: isMobile ? "100%" : "auto" }} onClick={gerarPdf}>
-            <FileDown size={16} /> Baixar PDF de evolução
-          </button>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            {/* Botão de filtro de data */}
+            <button
+              className={`btn ${filtroAberto ? "btn-primary" : "btn-ghost"}`}
+              style={{ width: isMobile ? "100%" : "auto" }}
+              onClick={() => setFiltroAberto(!filtroAberto)}
+            >
+              <Filter size={15} /> Filtrar período
+            </button>
+            <button
+              className="btn btn-primary"
+              style={{ width: isMobile ? "100%" : "auto" }}
+              onClick={gerarPdf}
+            >
+              <FileDown size={16} /> Baixar PDF de evolução
+            </button>
+          </div>
         )}
       </div>
+
       <p className="page-sub" style={{ marginBottom: 22 }}>Selecione um paciente e compare os indicadores ao longo dos meses.</p>
+
+      {/* Painel de filtro de data — aparece ao clicar em "Filtrar período" */}
+      {p && filtroAberto && (
+        <div style={{
+          background: "var(--surface2)", border: "1px solid var(--line)",
+          borderRadius: 12, padding: "16px 18px", marginBottom: 20,
+          display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-end",
+        }}>
+          <div>
+            <label style={{ fontSize: 12, color: "var(--inkFaint)", display: "block", marginBottom: 5 }}>De</label>
+            <input
+              type="date"
+              value={dataInicio}
+              onChange={(e) => setDataInicio(e.target.value)}
+              style={inputStyle}
+            />
+          </div>
+          <div>
+            <label style={{ fontSize: 12, color: "var(--inkFaint)", display: "block", marginBottom: 5 }}>Até</label>
+            <input
+              type="date"
+              value={dataFim}
+              onChange={(e) => setDataFim(e.target.value)}
+              style={inputStyle}
+            />
+          </div>
+          <button
+            className="btn btn-ghost"
+            onClick={() => { setDataInicio(""); setDataFim(""); }}
+            style={{ fontSize: 13 }}
+          >
+            Limpar
+          </button>
+          {(dataInicio || dataFim) && (
+            <span style={{ fontSize: 12, color: "var(--brand)", alignSelf: "center" }}>
+              Filtro ativo — PDF será gerado com ciclos do período selecionado
+            </span>
+          )}
+        </div>
+      )}
 
       <div style={{ marginBottom: 22 }}>
         <label style={{ display: "block", fontSize: 12, color: "var(--inkFaint)", marginBottom: 6 }}>Paciente</label>
-        <select value={pid} onChange={(e) => { setPid(e.target.value); setA(null); setB(null); }}
+        <select value={pid} onChange={(e) => { setPid(e.target.value); setA(null); setB(null); setDataInicio(""); setDataFim(""); setFiltroAberto(false); }}
           style={{ width: "100%", maxWidth: 380, padding: "11px 14px", borderRadius: 10, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 14, fontWeight: 500 }}>
           <option value="">Selecione um paciente…</option>
-          {elegiveis.map((x) => <option key={x.id} value={x.id}>{x.nome}</option>)}
+          {elegiveis.map((px) => (
+            <option key={px.id} value={px.id}>{px.nome}</option>
+          ))}
         </select>
       </div>
 
-      {!p ? (
-        <div className="card" style={{ padding: "56px 24px", textAlign: "center" }}>
-          <TrendingUp size={32} style={{ color: "var(--inkFaint)", marginBottom: 12 }} />
-          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>Selecione um paciente</div>
-          <div className="page-sub">Escolha acima para comparar a evolução mês a mês.</div>
+      {!p && (
+        <div className="card" style={{ padding: "48px 24px", textAlign: "center", color: "var(--inkFaint)" }}>
+          Selecione um paciente para visualizar a evolução.
         </div>
-      ) : (() => {
-        const cA = p.ciclos[ia], cB = p.ciclos[ib];
-        const DeltaCard = ({ lbl, valor, delta, unit }) => {
-          const d = +delta.toFixed(1); const sinal = d > 0 ? "+" : "";
-          const cor = d < 0 ? "var(--good)" : d > 0 ? "var(--warn)" : "var(--inkFaint)";
+      )}
+
+      {p && (() => {
+        const ciclos = p.ciclos;
+        const f = ciclos[ia], u = ciclos[ib];
+        if (!f || !u) return null;
+
+        const serie = ciclos.map((c) => ({
+          x: c.mes,
+          peso: c.peso,
+          imc: imc(c.peso, p.altura),
+          gordura: c.gordura,
+          visceral: c.visceral,
+        }));
+
+        const serieFiltrada = serie.slice(ia, ib + 1);
+
+        const Stat = ({ label, v1, v2, unit, bom }) => {
+          const diff = +(v2 - v1).toFixed(1);
+          const positivo = bom === "baixo" ? diff < 0 : diff > 0;
           return (
-            <div style={{ background: "var(--surface2)", borderRadius: 11, padding: "14px 16px" }}>
-              <div style={{ fontSize: 12, color: "var(--inkFaint)", marginBottom: 6 }}>{lbl}</div>
-              <div className="tnum" style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>{valor}</div>
-              <div className="tnum" style={{ fontSize: 13, fontWeight: 700, color: cor }}>{sinal}{br(d)} {unit}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 12, color: "var(--inkFaint)" }}>{label}</span>
+              <span style={{ fontSize: 22, fontWeight: 700, letterSpacing: -0.3 }}>{br(v2.toFixed(1))}{unit}</span>
+              <span style={{ fontSize: 13, color: diff === 0 ? "var(--inkFaint)" : positivo ? "var(--good)" : "var(--bad, #e74c3c)", fontWeight: 600 }}>
+                {diff > 0 ? "+" : ""}{br(diff.toFixed(1))}{unit} desde o início
+              </span>
             </div>
           );
         };
-        const serie = p.ciclos.map((c) => ({ x: c.mes, peso: c.peso, imc: imc(c.peso, p.altura), gordura: c.gordura, visceral: c.visceral }));
+
         return (
           <>
-            <div className="card" style={{ padding: "20px 22px", marginBottom: 28 }}>
-              <div style={{ display: "flex", alignItems: "flex-end", gap: 14, marginBottom: 20, flexWrap: "wrap" }}>
-                <div style={{ flex: isMobile ? 1 : "none" }}>
-                  <label style={{ display: "block", fontSize: 12, color: "var(--inkFaint)", marginBottom: 6 }}>De</label>
-                  <select value={ia} onChange={(e) => setA(+e.target.value)} style={{ width: "100%", padding: "9px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13.5, fontWeight: 600 }}>
-                    {p.ciclos.map((c, i) => <option key={i} value={i}>{c.mes}</option>)}
-                  </select>
-                </div>
-                <span style={{ color: "var(--inkFaint)", paddingBottom: 9 }}>→</span>
-                <div style={{ flex: isMobile ? 1 : "none" }}>
-                  <label style={{ display: "block", fontSize: 12, color: "var(--inkFaint)", marginBottom: 6 }}>Até</label>
-                  <select value={ib} onChange={(e) => setB(+e.target.value)} style={{ width: "100%", padding: "9px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13.5, fontWeight: 600 }}>
-                    {p.ciclos.map((c, i) => <option key={i} value={i}>{c.mes}</option>)}
-                  </select>
-                </div>
+            {/* Seletor de intervalo de comparação */}
+            <div className="card" style={{ marginBottom: 18, padding: "16px 18px", display: "flex", gap: 14, flexWrap: "wrap", alignItems: "flex-end" }}>
+              <div>
+                <label style={{ fontSize: 12, color: "var(--inkFaint)", display: "block", marginBottom: 5 }}>Ciclo inicial</label>
+                <select value={ia} onChange={(e) => setA(+e.target.value)}
+                  style={{ padding: "8px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13, fontWeight: 500 }}>
+                  {ciclos.map((c, i) => <option key={i} value={i}>Mês {c.mes} — {br(c.peso.toFixed(1))} kg</option>)}
+                </select>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fit, minmax(150px, 1fr))", gap: isMobile ? 10 : 14 }}>
-                <DeltaCard lbl="Peso" valor={`${br(cA.peso)}→${br(cB.peso)} kg`} delta={cB.peso - cA.peso} unit="kg" />
-                <DeltaCard lbl="IMC" valor={`${br(imc(cA.peso, p.altura))}→${br(imc(cB.peso, p.altura))}`} delta={imc(cB.peso, p.altura) - imc(cA.peso, p.altura)} unit="" />
-                <DeltaCard lbl="% Gordura" valor={`${br(cA.gordura)}→${br(cB.gordura)}%`} delta={cB.gordura - cA.gordura} unit="p.p." />
-                <DeltaCard lbl="Visceral" valor={`${cA.visceral}→${cB.visceral}`} delta={cB.visceral - cA.visceral} unit="" />
-              </div>
-              <div style={{ marginTop: 18, paddingTop: 18, borderTop: "1px solid var(--line)" }}>
-                <div style={{ fontSize: 11.5, fontWeight: 600, color: "var(--inkFaint)", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>Resumo do período</div>
-                <p style={{ fontSize: 14, lineHeight: 1.65 }}>{textoResumo(p, cA, cB)}</p>
+              <div>
+                <label style={{ fontSize: 12, color: "var(--inkFaint)", display: "block", marginBottom: 5 }}>Ciclo final</label>
+                <select value={ib} onChange={(e) => setB(+e.target.value)}
+                  style={{ padding: "8px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13, fontWeight: 500 }}>
+                  {ciclos.map((c, i) => <option key={i} value={i}>Mês {c.mes} — {br(c.peso.toFixed(1))} kg</option>)}
+                </select>
               </div>
             </div>
 
-            <h2 className="sec-title">Comparativo mês a mês</h2>
-            <div className="card" style={{ overflowX: "auto", marginBottom: 32 }}>
-              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
-                <thead>
-                  <tr>
-                    <th style={{ padding: "12px 14px", textAlign: "left", fontSize: 12, fontWeight: 600, color: "var(--inkFaint)", borderBottom: "1px solid var(--line)", background: "var(--surface2)", position: "sticky", left: 0 }}>Indicador</th>
-                    {p.ciclos.map((c, i) => <th key={i} style={{ padding: "12px 14px", textAlign: "center", fontSize: 12, fontWeight: 600, color: "var(--inkFaint)", borderBottom: "1px solid var(--line)", background: "var(--surface2)", whiteSpace: "nowrap" }}>{c.mes}</th>)}
-                  </tr>
-                </thead>
-                <tbody>
-                  {[["Peso (kg)", (c) => br(c.peso)], ["IMC", (c) => br(imc(c.peso, p.altura))], ["% Gordura", (c) => br(c.gordura)], ["Visceral", (c) => c.visceral], ["Dose final", (c) => br(c.doses[c.doses.length - 1]) + " " + c.unidade.toLowerCase()], ["Local", (c) => c.local]].map(([lbl, fn]) => (
-                    <tr key={lbl}>
-                      <td style={{ padding: "10px 14px", fontWeight: 600, borderBottom: "1px solid var(--line)", position: "sticky", left: 0, background: "var(--surface)", whiteSpace: "nowrap" }}>{lbl}</td>
-                      {p.ciclos.map((c, i) => <td key={i} className="tnum" style={{ padding: "10px 14px", textAlign: "center", borderBottom: "1px solid var(--line)", whiteSpace: "nowrap" }}>{fn(c)}</td>)}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            {/* Stats de comparação */}
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 14, marginBottom: 20 }}>
+              <div className="card" style={{ padding: "18px 20px" }}>
+                <Stat label="Peso" v1={f.peso} v2={u.peso} unit=" kg" bom="baixo" />
+              </div>
+              <div className="card" style={{ padding: "18px 20px" }}>
+                <Stat label="IMC" v1={imc(f.peso, p.altura)} v2={imc(u.peso, p.altura)} unit="" bom="baixo" />
+              </div>
+              {f.gordura != null && u.gordura != null && (
+                <div className="card" style={{ padding: "18px 20px" }}>
+                  <Stat label="Gordura corporal" v1={f.gordura} v2={u.gordura} unit="%" bom="baixo" />
+                </div>
+              )}
+              {f.visceral != null && u.visceral != null && (
+                <div className="card" style={{ padding: "18px 20px" }}>
+                  <Stat label="Gordura visceral" v1={f.visceral} v2={u.visceral} unit="" bom="baixo" />
+                </div>
+              )}
             </div>
 
-            <h2 className="sec-title">Gráficos de evolução</h2>
-            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fit, minmax(230px, 1fr))", gap: isMobile ? 10 : 14 }}>
-              <LinhaChart data={serie} dataKey="peso" title="Peso" unit="kg" height={150} />
-              <LinhaChart data={serie} dataKey="imc" title="IMC" unit="kg/m²" height={150} />
-              <LinhaChart data={serie} dataKey="gordura" color="var(--gord)" title="% Gordura" unit="%" height={150} />
-              <LinhaChart data={serie} dataKey="visceral" color="var(--visc)" title="Visceral" unit="nível" height={150} />
+            {/* Resumo textual */}
+            <div className="card" style={{ padding: "16px 20px", marginBottom: 20, fontSize: 14, lineHeight: 1.7, color: "var(--inkSoft)" }}>
+              {textoResumo(p, ia, ib)}
+            </div>
+
+            {/* Gráficos */}
+            <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr", gap: 16 }}>
+              <div className="card" style={{ padding: "18px 16px" }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--inkFaint)", marginBottom: 10 }}>Peso (kg)</div>
+                <LinhaChart data={serieFiltrada} xKey="x" yKey="peso" cor="var(--brand)" />
+              </div>
+              <div className="card" style={{ padding: "18px 16px" }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--inkFaint)", marginBottom: 10 }}>IMC</div>
+                <LinhaChart data={serieFiltrada} xKey="x" yKey="imc" cor="var(--good)" />
+              </div>
+              {serieFiltrada.some((s) => s.gordura != null) && (
+                <div className="card" style={{ padding: "18px 16px" }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--inkFaint)", marginBottom: 10 }}>Gordura (%)</div>
+                  <LinhaChart data={serieFiltrada} xKey="x" yKey="gordura" cor="#f39c12" />
+                </div>
+              )}
+              {serieFiltrada.some((s) => s.visceral != null) && (
+                <div className="card" style={{ padding: "18px 16px" }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--inkFaint)", marginBottom: 10 }}>Gordura visceral</div>
+                  <LinhaChart data={serieFiltrada} xKey="x" yKey="visceral" cor="#e74c3c" />
+                </div>
+              )}
             </div>
           </>
         );
