@@ -5,6 +5,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getFunctions } from "firebase/functions";
 
 const config = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -25,15 +26,17 @@ export const ADMIN_EMAIL =
 let app = null;
 let auth = null;
 let db = null;
+let functions = null;
 
 if (FIREBASE_ATIVO) {
   try {
     app = initializeApp(config);
     auth = getAuth(app);
     db = getFirestore(app);
+    functions = getFunctions(app, "southamerica-east1");
   } catch (e) {
     console.error("Falha ao inicializar Firebase:", e);
   }
 }
 
-export { app, auth, db };
+export { app, auth, db, functions };
