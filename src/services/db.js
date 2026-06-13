@@ -6,7 +6,8 @@ import {
   collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc,
   deleteDoc, query, orderBy, serverTimestamp,
 } from "firebase/firestore";
-import { db } from "./firebase.js";
+import { httpsCallable } from "firebase/functions";
+import { db, functions } from "./firebase.js";
 
 // ---------- PERFIL DO USUÁRIO ----------
 export async function getPerfil(uid) {
@@ -94,6 +95,14 @@ export async function definirPlano(uid, plano) {
     plano,
     planoDesde: serverTimestamp(),
   });
+}
+
+// Exclusão real (Auth + Firestore + pacientes) via Cloud Function.
+// O client NUNCA tem permissão de delete direto (ver firestore.rules).
+export async function excluirUsuarioAdmin(uid) {
+  const fn = httpsCallable(functions, "excluirUsuarioAdmin");
+  const res = await fn({ uid });
+  return res.data;
 }
 
 export { VALOR_PLANO };
