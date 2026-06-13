@@ -1,19 +1,23 @@
 // src/screens/Admin.jsx
-// Alterações em relação à Fase 3:
-//  - Coluna "Origem" adicionada: "Webhook" ou "Admin" com badge colorido
-//  - Botão "Adicionar usuário" — cria conta Firebase Auth + perfil no Firestore
-//  - Botão "Excluir" por linha — remove o documento do Firestore (não exclui Auth, apenas desativa acesso)
-//  - db.js precisa das funções: criarUsuarioAdmin, excluirUsuarioAdmin (adicione conforme abaixo)
+// Alterações:
+//  - Coluna "Origem": "Webhook" ou "Admin" com badge colorido
+//  - Botão "Adicionar usuário": cria conta Firebase Auth + perfil no Firestore
+//  - Botão "Excluir" por linha: chama a Cloud Function excluirUsuarioAdmin
+//    (Admin SDK), que remove Auth + perfil + pacientes. Exclusão direta pelo
+//    client está bloqueada pelas firestore.rules (allow delete: if false).
+//  - Filtro de período (Hoje / 7 dias / 30 dias) + botão de atualizar,
+//    refiltra/recarrega sem reload da página (FiltroPeriodo.jsx)
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Shield, Users, DollarSign, Loader2, LogOut, Sun, Moon, Plus, Trash2, X, Eye, EyeOff } from "lucide-react";
-import { listarTodosUsuarios, definirPlano, VALOR_PLANO } from "../services/db.js";
+import { listarTodosUsuarios, definirPlano, excluirUsuarioAdmin, VALOR_PLANO } from "../services/db.js";
 import { sair } from "../services/auth.js";
 import { useTema } from "../lib/theme.jsx";
 import { br } from "../lib/utils.js";
 import { db } from "../services/firebase.js";
-import { doc, setDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp } from "firebase/firestore";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
+import FiltroPeriodo, { dentroDoPeriodo } from "../components/FiltroPeriodo.jsx";
 
 const PLANOS = ["nenhum", "mensal", "trimestral", "anual", "vitalicio"];
 const LABEL = { nenhum: "Sem plano", mensal: "Mensal", trimestral: "Trimestral", anual: "Anual", vitalicio: "Vitalício" };
@@ -171,6 +175,7 @@ export default function Admin() {
   const [salvando, setSalvando] = useState(null);
   const [excluindo, setExcluindo] = useState(null);
   const [showModal, setShowModal] = useState(false);
+  const [periodo, setPeriodo] = useState("30d");
 
   const carregar = () => {
     setCarregando(true);
@@ -191,18 +196,26 @@ export default function Admin() {
   };
 
   const excluir = async (uid) => {
-    if (!window.confirm("Remover este usuário do sistema? Ele perderá o acesso.")) return;
+    if (!window.confirm("Excluir este usuário permanentemente? Isso remove o acesso, o perfil e os pacientes dele. Esta ação não pode ser desfeita.")) return;
     setExcluindo(uid);
     try {
-      // Remove apenas o documento do Firestore (sem excluir Auth — Firebase Admin SDK necessário para isso)
-      await deleteDoc(doc(db, "usuarios", uid));
+      await excluirUsuarioAdmin(uid);
       setUsuarios((us) => us.filter((u) => u.id !== uid));
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      window.alert("Não foi possível excluir o usuário. Verifique sua conexão ou tente novamente.");
+    }
     setExcluindo(null);
   };
 
-  const receitaTotal = usuarios.reduce((s, u) => s + receitaUsuario(u), 0);
-  const assinantes = usuarios.filter((u) => u.plano && u.plano !== "nenhum").length;
+  // Filtra por período de cadastro (criadoEm) sem recarregar a página.
+  const usuariosFiltrados = useMemo(
+    () => usuarios.filter((u) => dentroDoPeriodo(u.criadoEm, periodo)),
+    [usuarios, periodo]
+  );
+
+  const receitaTotal = usuariosFiltrados.reduce((s, u) => s + receitaUsuario(u), 0);
+  const assinantes = usuariosFiltrados.filter((u) => u.plano && u.plano !== "nenhum").length;
 
   const badgeOrigem = (origem) => {
     const isWebhook = origem === "webhook";
@@ -248,8 +261,12 @@ export default function Admin() {
           </button>
         </div>
 
+        <div style={{ marginBottom: 18 }}>
+          <FiltroPeriodo valor={periodo} onChange={setPeriodo} onRefresh={carregar} carregando={carregando} />
+        </div>
+
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginBottom: 30 }}>
-          <ResumoCard Icon={Users} label="Usuários" valor={usuarios.length} />
+          <ResumoCard Icon={Users} label="Usuários" valor={usuariosFiltrados.length} />
           <ResumoCard Icon={Shield} label="Assinantes" valor={assinantes} accent="var(--good)" />
           <ResumoCard Icon={DollarSign} label="Receita acumulada" valor={`R$ ${br(receitaTotal.toFixed(2))}`} accent="var(--brand)" />
         </div>
@@ -258,9 +275,9 @@ export default function Admin() {
           <div style={{ display: "flex", justifyContent: "center", padding: 60 }}>
             <Loader2 size={28} className="spin" color="var(--inkFaint)" />
           </div>
-        ) : usuarios.length === 0 ? (
+        ) : usuariosFiltrados.length === 0 ? (
           <div className="card" style={{ padding: 48, textAlign: "center", color: "var(--inkFaint)" }}>
-            Nenhum usuário cadastrado ainda.
+            Nenhum usuário cadastrado neste período.
           </div>
         ) : (
           <div className="card" style={{ overflowX: "auto" }}>
@@ -273,7 +290,7 @@ export default function Admin() {
                 </tr>
               </thead>
               <tbody>
-                {usuarios.map((u) => (
+                {usuariosFiltrados.map((u) => (
                   <tr key={u.id}>
                     <td style={{ padding: "13px 16px", borderBottom: "1px solid var(--line)", fontWeight: 600, whiteSpace: "nowrap" }}>
                       {u.clinica || "—"}
@@ -312,7 +329,7 @@ export default function Admin() {
 
         <p style={{ fontSize: 11.5, color: "var(--inkFaint)", marginTop: 16, lineHeight: 1.6 }}>
           Receita estimada com base no plano e no tempo desde a adesão. Vitalício é tratado como cortesia (sem receita recorrente).
-          A exclusão remove o acesso do médico ao sistema, mas não apaga os dados dos pacientes dele.
+          A exclusão é permanente: remove o login, o perfil e os pacientes do médico.
         </p>
       </div>
 
