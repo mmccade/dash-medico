@@ -1,4 +1,10 @@
-// src/App.jsx — FASE 3: login + app + admin
+// src/App.jsx — FASE 3 + features novas
+// Alterações:
+//  - Importa ModalPlanos
+//  - Se o usuário está logado mas plano === "nenhum" (não veio pelo webhook e não pagou),
+//    renderiza o app com o modal de planos por cima.
+//  - Nenhuma outra lógica foi alterada.
+
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { StoreProvider } from "./lib/store.jsx";
@@ -15,6 +21,7 @@ import NovoCiclo from "./screens/NovoCiclo.jsx";
 import NovoPaciente from "./screens/NovoPaciente.jsx";
 import Importar from "./screens/Importar.jsx";
 import Config from "./screens/Config.jsx";
+import ModalPlanos from "./components/ModalPlanos.jsx";
 
 function TelaCarregando() {
   return (
@@ -49,7 +56,7 @@ function AppMedico() {
 }
 
 export default function App() {
-  const { user, carregando, isAdmin, firebaseAtivo } = useAuth();
+  const { user, perfil, carregando, isAdmin, firebaseAtivo } = useAuth();
 
   // Firebase não configurado: roda em modo demo direto (sem login)
   if (!firebaseAtivo) {
@@ -60,5 +67,14 @@ export default function App() {
   if (!user) return <Login />;
   if (isAdmin) return <Admin />;
 
-  return <StoreProvider><AppMedico /></StoreProvider>;
+  // Usuário logado: verifica se tem plano ativo
+  const semPlano = !perfil || !perfil.plano || perfil.plano === "nenhum";
+
+  return (
+    <StoreProvider>
+      <AppMedico />
+      {/* Modal de planos sobreposto quando não há plano ativo */}
+      {semPlano && <ModalPlanos />}
+    </StoreProvider>
+  );
 }
