@@ -1,20 +1,40 @@
 // src/screens/Pacientes.jsx
+// Alterações:
+//  - Ordenação customizável: cadastro (padrão), A-Z, maior perda de peso
+//  - Botão "Exportar CSV" que chama store.exportarCSV()
+
 import { useState } from "react";
-import { Upload, Plus, Search } from "lucide-react";
+import { Upload, Plus, Search, Download, ArrowUpDown } from "lucide-react";
 import { useStore } from "../lib/store.jsx";
 import { ultimoCiclo, perdaPeso, mesesTrat, br } from "../lib/utils.js";
 import { Avatar, Toggle, Chip } from "../components/ui.jsx";
 import { useIsMobile } from "../components/Shell.jsx";
 
+const ORDENS = [
+  { id: "cadastro", label: "Mais recentes" },
+  { id: "az", label: "A–Z" },
+  { id: "perda", label: "Maior perda" },
+];
+
 export default function Pacientes({ navegar }) {
-  const { pacientes, toggleAtivo } = useStore();
+  const { pacientes, toggleAtivo, exportarCSV } = useStore();
   const [filtro, setFiltro] = useState("ativo");
   const [busca, setBusca] = useState("");
+  const [ordem, setOrdem] = useState("cadastro");
+  const [mostrarOrdem, setMostrarOrdem] = useState(false);
   const isMobile = useIsMobile();
 
   const lista = pacientes
     .filter((p) => (filtro === "todos" ? true : filtro === "ativo" ? p.ativo : !p.ativo))
-    .filter((p) => p.nome.toLowerCase().includes(busca.toLowerCase()));
+    .filter((p) => p.nome.toLowerCase().includes(busca.toLowerCase()))
+    .slice()
+    .sort((a, b) => {
+      if (ordem === "az") return a.nome.localeCompare(b.nome, "pt-BR");
+      if (ordem === "perda") return perdaPeso(b) - perdaPeso(a);
+      return 0; // cadastro: mantém ordem original (mais recente primeiro, do Firestore)
+    });
+
+  const labelOrdem = ORDENS.find((o) => o.id === ordem)?.label;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
@@ -24,8 +44,11 @@ export default function Pacientes({ navegar }) {
           <p className="page-sub">{pacientes.filter((p) => p.ativo).length} ativos · {pacientes.length} no total</p>
         </div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap", width: isMobile ? "100%" : "auto" }}>
+          <button className="btn btn-ghost" style={{ flex: isMobile ? 1 : "none" }} onClick={exportarCSV} title="Exportar todos como CSV">
+            <Download size={16} /> Exportar CSV
+          </button>
           <button className="btn btn-ghost" style={{ flex: isMobile ? 1 : "none" }} onClick={() => navegar("importar")}>
-            <Upload size={16} /> Importar planilha
+            <Upload size={16} /> Importar
           </button>
           <button className="btn btn-primary" style={{ flex: isMobile ? 1 : "none" }} onClick={() => navegar("novopaciente")}>
             <Plus size={16} /> Cadastrar paciente
@@ -33,6 +56,7 @@ export default function Pacientes({ navegar }) {
         </div>
       </div>
 
+      {/* Filtros + busca + ordenação */}
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
         <div style={{ display: "flex", background: "var(--surface2)", borderRadius: 10, padding: 3, flex: isMobile ? 1 : "none" }}>
           {[["ativo", "Ativos"], ["inativo", "Inativos"], ["todos", "Todos"]].map(([k, l]) => (
@@ -44,10 +68,37 @@ export default function Pacientes({ navegar }) {
             }}>{l}</button>
           ))}
         </div>
+
         <div style={{ position: "relative", flex: 1, minWidth: isMobile ? "100%" : 200 }}>
           <Search size={15} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--inkFaint)" }} />
           <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por nome…"
             style={{ width: "100%", padding: "9px 14px 9px 34px", borderRadius: 10, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13.5 }} />
+        </div>
+
+        {/* Seletor de ordenação */}
+        <div style={{ position: "relative" }}>
+          <button onClick={() => setMostrarOrdem(!mostrarOrdem)} className="btn btn-ghost" style={{ fontSize: 13, gap: 6 }}>
+            <ArrowUpDown size={14} /> {labelOrdem}
+          </button>
+          {mostrarOrdem && (
+            <div style={{
+              position: "absolute", top: "calc(100% + 6px)", right: 0, zIndex: 50,
+              background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 12,
+              boxShadow: "0 8px 24px rgba(0,0,0,0.1)", minWidth: 160, overflow: "hidden",
+            }}>
+              {ORDENS.map((o) => (
+                <button key={o.id} onClick={() => { setOrdem(o.id); setMostrarOrdem(false); }}
+                  style={{
+                    display: "block", width: "100%", textAlign: "left", padding: "11px 16px",
+                    fontSize: 13.5, fontWeight: ordem === o.id ? 700 : 400,
+                    color: ordem === o.id ? "var(--brand)" : "var(--ink)",
+                    background: ordem === o.id ? "var(--brandSoft)" : "transparent",
+                  }}>
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 
