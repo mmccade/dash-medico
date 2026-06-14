@@ -126,20 +126,54 @@ function ModalFiltroPdf({ ciclos, onGerar, onFechar }) {
   );
 }
 
+// ─── InputDecimal reutilizável ────────────────────────────────
+function InputDecimal({ value, onChange, placeholder = "0,0", maxInt = 5, maxDec = 1, maxVal = 9999, style: extraStyle = {} }) {
+  const handleChange = (e) => {
+    let v = e.target.value.replace(/[^0-9,]/g, "").replace(/,{2,}/g, ",");
+    const partes = v.split(",");
+    if (partes[0].length > maxInt) partes[0] = partes[0].slice(0, maxInt);
+    if (partes[1] !== undefined) partes[1] = partes[1].slice(0, maxDec);
+    v = partes.join(partes.length > 1 ? "," : "");
+    const num = parseFloat(v.replace(",", "."));
+    if (!isNaN(num) && num > maxVal) return;
+    onChange(v);
+  };
+  const inp = { padding: "9px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13.5, width: "100%", color: "var(--ink)", boxSizing: "border-box", ...extraStyle };
+  return <input type="text" inputMode="decimal" value={value} onChange={handleChange} placeholder={placeholder} style={inp} />;
+}
+
 // ─── Modal de edição de ciclo ─────────────────────────────────
-function ModalEditarCiclo({ ciclo, onSalvar, onFechar }) {
+function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
   const [f, setF] = useState({
     ...ciclo,
     data: ciclo.data || "",
-    d1: ciclo.doses?.[0] ?? "", d2: ciclo.doses?.[1] ?? "",
-    d3: ciclo.doses?.[2] ?? "", d4: ciclo.doses?.[3] ?? "",
+    // altura opcional — preenchida com a do paciente mas editável
+    altura: alturaBase ? String(alturaBase).replace(".", ",") : "",
+    d1: ciclo.doses?.[0] != null ? String(ciclo.doses[0]).replace(".", ",") : "",
+    d2: ciclo.doses?.[1] != null ? String(ciclo.doses[1]).replace(".", ",") : "",
+    d3: ciclo.doses?.[2] != null ? String(ciclo.doses[2]).replace(".", ",") : "",
+    d4: ciclo.doses?.[3] != null ? String(ciclo.doses[3]).replace(".", ",") : "",
+    // peso e gordura já podem ter vírgula ou ponto
+    peso: String(ciclo.peso ?? "").replace(".", ","),
+    gordura: String(ciclo.gordura ?? "").replace(".", ","),
+    visceral: String(ciclo.visceral ?? ""),
   });
   const [salvando, setSalvando] = useState(false);
   const toast = useToast();
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
 
+  // IMC calculado ao vivo
+  const pesoNum = parseNum(f.peso);
+  const altNum  = parseNum(f.altura);
+  const imcCalc = pesoNum > 0 && altNum > 0
+    ? +(pesoNum / (altNum * altNum)).toFixed(1)
+    : null;
+
   const salvar = async () => {
-    const raw = { ...f, doses: [f.d1, f.d2, f.d3, f.d4].map(parseNum) };
+    const raw = {
+      ...f,
+      doses: [f.d1, f.d2, f.d3, f.d4].map((d) => parseNum(d)),
+    };
     const { data, errors } = validateCiclo(raw);
     if (errors.length) { toast(primeiroErro(errors)); return; }
     setSalvando(true);
@@ -148,6 +182,7 @@ function ModalEditarCiclo({ ciclo, onSalvar, onFechar }) {
   };
 
   const inp = { padding: "9px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13.5, width: "100%", color: "var(--ink)", boxSizing: "border-box" };
+  const isMG = (f.unidade || "MG") === "MG";
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
@@ -157,24 +192,68 @@ function ModalEditarCiclo({ ciclo, onSalvar, onFechar }) {
           <button onClick={onFechar} style={{ color: "var(--inkFaint)" }}><X size={20} /></button>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+
+          {/* Linha 1: Mês + Data */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div className="field"><label>Mês *</label><input style={inp} value={f.mes} onChange={(e) => set("mes", e.target.value)} maxLength={20} /></div>
             <div className="field">
               <label>Data de referência</label>
               <input style={inp} type="date" value={f.data} onChange={(e) => set("data", e.target.value)} />
             </div>
-            <div className="field"><label>Peso (kg) *</label><input style={inp} type="number" value={f.peso} onChange={(e) => set("peso", e.target.value)} min={20} max={400} /></div>
-            <div className="field"><label>% Gordura</label><input style={inp} type="number" value={f.gordura} onChange={(e) => set("gordura", e.target.value)} min={0} max={100} /></div>
-            <div className="field"><label>Gordura visceral</label><input style={inp} type="number" value={f.visceral} onChange={(e) => set("visceral", e.target.value)} min={0} max={50} /></div>
           </div>
+
+          {/* Linha 2: Peso + Altura + IMC calculado */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
+            <div className="field">
+              <label>Peso (kg) *</label>
+              <InputDecimal value={f.peso} onChange={(v) => set("peso", v)} placeholder="78,5" maxInt={3} maxDec={1} maxVal={400} />
+            </div>
+            <div className="field">
+              <label>Altura (m) <span style={{ fontSize: 11, color: "var(--inkFaint)" }}>opcional</span></label>
+              <InputDecimal value={f.altura} onChange={(v) => set("altura", v)} placeholder="1,64" maxInt={1} maxDec={2} maxVal={2.5} />
+            </div>
+            <div>
+              <div style={{ fontSize: 12, color: "var(--inkFaint)", marginBottom: 6 }}>IMC calculado</div>
+              <div style={{
+                padding: "9px 12px", borderRadius: 9, background: "var(--surface2)",
+                border: "1px solid var(--line)", fontSize: 16, fontWeight: 700,
+                color: imcCalc ? "var(--brand)" : "var(--inkFaint)",
+                minHeight: 40, display: "flex", alignItems: "center",
+              }}>
+                {imcCalc ? String(imcCalc).replace(".", ",") : "—"}
+              </div>
+            </div>
+          </div>
+
+          {/* Linha 3: Gordura + Visceral */}
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div className="field">
+              <label>% Gordura</label>
+              <InputDecimal value={f.gordura} onChange={(v) => set("gordura", v)} placeholder="34,0" maxInt={2} maxDec={1} maxVal={100} />
+            </div>
+            <div className="field">
+              <label>Gordura visceral</label>
+              <InputDecimal value={String(f.visceral)} onChange={(v) => set("visceral", v)} placeholder="9" maxInt={2} maxDec={0} maxVal={50} />
+            </div>
+          </div>
+
+          {/* Doses */}
           <div>
-            <label style={{ fontSize: 12, color: "var(--inkFaint)", display: "block", marginBottom: 8 }}>Doses semanais ({f.unidade})</label>
+            <label style={{ fontSize: 12, color: "var(--inkFaint)", display: "block", marginBottom: 8 }}>Doses semanais ({f.unidade || "MG"})</label>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
               {[["d1","S1"],["d2","S2"],["d3","S3"],["d4","S4"]].map(([k,l]) => (
-                <div key={k}><div style={{ fontSize: 11, color: "var(--inkFaint)", marginBottom: 4 }}>{l}</div><input style={inp} type="number" value={f[k]} onChange={(e) => set(k, e.target.value)} min={0} max={100} /></div>
+                <div key={k}>
+                  <div style={{ fontSize: 11, color: "var(--inkFaint)", marginBottom: 4 }}>{l}</div>
+                  {isMG
+                    ? <InputDecimal value={f[k]} onChange={(v) => set(k, v)} placeholder="2,5" maxInt={2} maxDec={1} maxVal={99.9} />
+                    : <InputDecimal value={f[k]} onChange={(v) => { const n = v.replace(/[^0-9]/g,"").slice(0,2); set(k, n); }} placeholder="20" maxInt={2} maxDec={0} maxVal={99} />
+                  }
+                </div>
               ))}
             </div>
           </div>
+
+          {/* Local */}
           <div className="field"><label>Local</label>
             <div style={{ display: "inline-flex", background: "var(--surface2)", borderRadius: 10, padding: 3 }}>
               {["Casa","Clínica"].map((o) => (
@@ -182,9 +261,11 @@ function ModalEditarCiclo({ ciclo, onSalvar, onFechar }) {
               ))}
             </div>
           </div>
-          <div className="field"><label>Suplementação</label><input style={inp} value={f.suplementacao} onChange={(e) => set("suplementacao", e.target.value)} maxLength={500} /></div>
-          <div className="field"><label>Colaterais</label><textarea style={{ ...inp, minHeight: 72, resize: "vertical" }} value={f.colaterais} onChange={(e) => set("colaterais", e.target.value)} maxLength={1000} /></div>
-          <div className="field"><label>Observações</label><textarea style={{ ...inp, minHeight: 72, resize: "vertical" }} value={f.obs} onChange={(e) => set("obs", e.target.value)} maxLength={2000} /></div>
+
+          <div className="field"><label>Suplementação</label><input style={inp} value={f.suplementacao || ""} onChange={(e) => set("suplementacao", e.target.value)} maxLength={500} /></div>
+          <div className="field"><label>Colaterais</label><textarea style={{ ...inp, minHeight: 72, resize: "vertical" }} value={f.colaterais || ""} onChange={(e) => set("colaterais", e.target.value)} maxLength={1000} /></div>
+          <div className="field"><label>Observações</label><textarea style={{ ...inp, minHeight: 72, resize: "vertical" }} value={f.obs || ""} onChange={(e) => set("obs", e.target.value)} maxLength={2000} /></div>
+
           <div style={{ display: "flex", gap: 10 }}>
             <button onClick={onFechar} className="btn btn-ghost" style={{ flex: 1, justifyContent: "center" }}>Cancelar</button>
             <button onClick={salvar} disabled={salvando} className="btn btn-primary" style={{ flex: 1, justifyContent: "center" }}>
@@ -472,7 +553,7 @@ export default function Ficha({ pacienteId, navegar }) {
       </div>
 
       {editandoCicloIdx !== null && (
-        <ModalEditarCiclo ciclo={p.ciclos[editandoCicloIdx]} onSalvar={(d) => editarCiclo(p.id, editandoCicloIdx, d)} onFechar={() => setEditandoCicloIdx(null)} />
+        <ModalEditarCiclo ciclo={p.ciclos[editandoCicloIdx]} alturaBase={p.altura} onSalvar={(d) => editarCiclo(p.id, editandoCicloIdx, d)} onFechar={() => setEditandoCicloIdx(null)} />
       )}
       {editandoPaciente && (
         <ModalEditarPaciente p={p} onSalvar={(d) => editarPaciente(p.id, d)} onFechar={() => setEditandoPaciente(false)} />
