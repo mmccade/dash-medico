@@ -1,6 +1,10 @@
 // src/lib/store.jsx
-// Estado central. Se o Firebase estiver ativo e houver usuário logado,
-// lê/grava no Firestore. Caso contrário, roda em modo demo (memória).
+// Alterações:
+//  - editarCiclo(pacienteId, index, dadosNovos) — substitui ciclo por índice
+//  - excluirCiclo(pacienteId, index) — remove ciclo por índice
+//  - editarPaciente(pacienteId, dados) — atualiza campos do paciente
+//  - exportarCSV() — gera e baixa CSV de todos os pacientes
+
 import { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { PACIENTES_DEMO, CONFIG_INICIAL } from "./dados.js";
 import { useAuth } from "./auth.jsx";
@@ -17,13 +21,8 @@ export function StoreProvider({ children }) {
   const [nextId, setNextId] = useState(9);
   const [carregando, setCarregando] = useState(usandoFirebase);
 
-  // Carrega do Firestore quando há usuário
   useEffect(() => {
-    if (!usandoFirebase) {
-      setPacientes(PACIENTES_DEMO);
-      setConfig(CONFIG_INICIAL);
-      return;
-    }
+    if (!usandoFirebase) { setPacientes(PACIENTES_DEMO); setConfig(CONFIG_INICIAL); return; }
     let vivo = true;
     setCarregando(true);
     dbApi.listarPacientes(user.uid)
@@ -33,7 +32,6 @@ export function StoreProvider({ children }) {
     return () => { vivo = false; };
   }, [usandoFirebase, user]);
 
-  // Config vem do perfil quando logado
   useEffect(() => {
     if (usandoFirebase && perfil) {
       setConfig({
@@ -42,6 +40,7 @@ export function StoreProvider({ children }) {
         crm: perfil.crm || "",
         logo: perfil.logo || null,
         murevNoPdf: perfil.murevNoPdf !== false,
+        pesoMeta: perfil.pesoMeta || null,
       });
     }
   }, [usandoFirebase, perfil]);
@@ -80,18 +79,38 @@ export function StoreProvider({ children }) {
     const p = pacientes.find((x) => x.id === pacienteId);
     if (!p) return;
     const novosCiclos = [...p.ciclos, ciclo];
-    if (usandoFirebase) {
-      await dbApi.atualizarPaciente(user.uid, pacienteId, { ciclos: novosCiclos });
-    }
+    if (usandoFirebase) await dbApi.atualizarPaciente(user.uid, pacienteId, { ciclos: novosCiclos });
     setPacientes((ps) => ps.map((x) => (x.id === pacienteId ? { ...x, ciclos: novosCiclos } : x)));
   }, [usandoFirebase, user, pacientes]);
+
+  // ✅ NOVO — editar ciclo por índice
+  const editarCiclo = useCallback(async (pacienteId, idx, dadosNovos) => {
+    const p = pacientes.find((x) => x.id === pacienteId);
+    if (!p) return;
+    const novosCiclos = p.ciclos.map((c, i) => (i === idx ? { ...c, ...dadosNovos } : c));
+    if (usandoFirebase) await dbApi.atualizarPaciente(user.uid, pacienteId, { ciclos: novosCiclos });
+    setPacientes((ps) => ps.map((x) => (x.id === pacienteId ? { ...x, ciclos: novosCiclos } : x)));
+  }, [usandoFirebase, user, pacientes]);
+
+  // ✅ NOVO — excluir ciclo por índice
+  const excluirCiclo = useCallback(async (pacienteId, idx) => {
+    const p = pacientes.find((x) => x.id === pacienteId);
+    if (!p) return;
+    const novosCiclos = p.ciclos.filter((_, i) => i !== idx);
+    if (usandoFirebase) await dbApi.atualizarPaciente(user.uid, pacienteId, { ciclos: novosCiclos });
+    setPacientes((ps) => ps.map((x) => (x.id === pacienteId ? { ...x, ciclos: novosCiclos } : x)));
+  }, [usandoFirebase, user, pacientes]);
+
+  // ✅ NOVO — editar dados do paciente
+  const editarPaciente = useCallback(async (pacienteId, dados) => {
+    if (usandoFirebase) await dbApi.atualizarPaciente(user.uid, pacienteId, dados);
+    setPacientes((ps) => ps.map((x) => (x.id === pacienteId ? { ...x, ...dados } : x)));
+  }, [usandoFirebase, user]);
 
   const toggleAtivo = useCallback(async (pacienteId) => {
     const p = pacientes.find((x) => x.id === pacienteId);
     if (!p) return;
-    if (usandoFirebase) {
-      await dbApi.atualizarPaciente(user.uid, pacienteId, { ativo: !p.ativo });
-    }
+    if (usandoFirebase) await dbApi.atualizarPaciente(user.uid, pacienteId, { ativo: !p.ativo });
     setPacientes((ps) => ps.map((x) => (x.id === pacienteId ? { ...x, ativo: !x.ativo } : x)));
   }, [usandoFirebase, user, pacientes]);
 
@@ -103,10 +122,42 @@ export function StoreProvider({ children }) {
     }
   }, [usandoFirebase, user, setPerfil]);
 
+  // ✅ NOVO — exportar todos os pacientes como CSV
+  const exportarCSV = useCallback(() => {
+    const linhas = [];
+    const cab = ["Nome", "Idade", "Sexo", "Altura(m)", "Inicio", "Objetivo", "Condicoes", "Ativo",
+      "Mes", "Peso(kg)", "Gordura(%)", "Visceral", "Unidade", "Dose_S1", "Dose_S2", "Dose_S3", "Dose_S4",
+      "Local", "Suplementacao", "Colaterais", "Obs"];
+    linhas.push(cab.join(";"));
+    pacientes.forEach((p) => {
+      if (p.ciclos.length === 0) {
+        linhas.push([p.nome, p.idade, p.sexo, p.altura, p.inicio, p.objetivo, p.comorbidades, p.ativo ? "sim" : "não",
+          "", "", "", "", "", "", "", "", "", "", "", "", ""].join(";"));
+      } else {
+        p.ciclos.forEach((c) => {
+          linhas.push([
+            p.nome, p.idade, p.sexo, p.altura, p.inicio, p.objetivo, p.comorbidades, p.ativo ? "sim" : "não",
+            c.mes, c.peso, c.gordura, c.visceral, c.unidade,
+            c.doses?.[0] ?? "", c.doses?.[1] ?? "", c.doses?.[2] ?? "", c.doses?.[3] ?? "",
+            c.local, c.suplementacao, c.colaterais, c.obs,
+          ].map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(";"));
+        });
+      }
+    });
+    const blob = new Blob(["\uFEFF" + linhas.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `pacientes_murev_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }, [pacientes]);
+
   return (
     <StoreCtx.Provider value={{
       pacientes, config, carregando, usandoFirebase,
-      getPaciente, addPaciente, addPacientesEmLote, addCiclo, toggleAtivo, salvarConfig,
+      getPaciente, addPaciente, addPacientesEmLote, addCiclo,
+      editarCiclo, excluirCiclo, editarPaciente,
+      toggleAtivo, salvarConfig, exportarCSV,
     }}>
       {children}
     </StoreCtx.Provider>
