@@ -1,30 +1,38 @@
 // src/screens/NovoPaciente.jsx
+// Alteração: validação via validate.js antes de salvar
+
 import { useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useStore } from "../lib/store.jsx";
 import { useToast } from "../lib/toast.jsx";
-import { parseNum } from "../lib/utils.js";
+import { validatePaciente, primeiroErro } from "../lib/validate.js";
 
 export default function NovoPaciente({ navegar }) {
   const { addPaciente } = useStore();
   const toast = useToast();
-  const [f, setF] = useState({ nome: "", idade: "", altura: "", sexo: "Feminino", inicio: "2026-05-08", objetivo: "", comorbidades: "" });
+  const [f, setF] = useState({
+    nome: "", idade: "", altura: "", sexo: "Feminino",
+    inicio: new Date().toISOString().slice(0, 10),
+    objetivo: "", comorbidades: "",
+  });
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
-
   const [salvando, setSalvando] = useState(false);
+
   const salvar = async () => {
-    if (!f.nome.trim()) { toast("Informe o nome do paciente"); return; }
+    const { data, errors } = validatePaciente(f);
+    if (errors.length) {
+      toast(primeiroErro(errors));
+      return;
+    }
     setSalvando(true);
     try {
-      const novo = await addPaciente({
-        nome: f.nome.trim(), idade: parseInt(f.idade) || 0, sexo: f.sexo,
-        altura: parseNum(f.altura) || 1.7, inicio: f.inicio || "2026-05-08",
-        objetivo: f.objetivo.trim() || "—", comorbidades: f.comorbidades.trim() || "Nenhuma relatada",
-      });
+      const novo = await addPaciente(data);
       toast("Paciente cadastrado");
       navegar("ficha", novo.id);
     } catch (e) {
-      console.error(e); toast("Erro ao salvar paciente"); setSalvando(false);
+      console.error(e);
+      toast("Erro ao salvar paciente");
+      setSalvando(false);
     }
   };
 
@@ -38,10 +46,19 @@ export default function NovoPaciente({ navegar }) {
       <div className="card" style={{ padding: "20px 22px" }}>
         <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Dados do paciente</h3>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div className="field"><label>Nome completo</label><input type="text" value={f.nome} onChange={(e) => set("nome", e.target.value)} placeholder="Nome do paciente" /></div>
+          <div className="field">
+            <label>Nome completo *</label>
+            <input type="text" maxLength={150} value={f.nome} onChange={(e) => set("nome", e.target.value)} placeholder="Nome do paciente" />
+          </div>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
-            <div className="field"><label>Idade</label><input type="number" inputMode="numeric" value={f.idade} onChange={(e) => set("idade", e.target.value)} placeholder="42" /></div>
-            <div className="field"><label>Altura (m)</label><input type="number" inputMode="decimal" step="0.01" value={f.altura} onChange={(e) => set("altura", e.target.value)} placeholder="1,64" /></div>
+            <div className="field">
+              <label>Idade</label>
+              <input type="number" inputMode="numeric" min={0} max={130} value={f.idade} onChange={(e) => set("idade", e.target.value)} placeholder="42" />
+            </div>
+            <div className="field">
+              <label>Altura (m)</label>
+              <input type="number" inputMode="decimal" step="0.01" min={0.5} max={2.5} value={f.altura} onChange={(e) => set("altura", e.target.value)} placeholder="1,64" />
+            </div>
           </div>
           <div className="field">
             <label>Sexo</label>
@@ -51,15 +68,26 @@ export default function NovoPaciente({ navegar }) {
               ))}
             </div>
           </div>
-          <div className="field"><label>Início do tratamento</label><input type="date" value={f.inicio} onChange={(e) => set("inicio", e.target.value)} /></div>
-          <div className="field"><label>Objetivo</label><input type="text" value={f.objetivo} onChange={(e) => set("objetivo", e.target.value)} placeholder="Emagrecimento e controle metabólico…" /></div>
-          <div className="field"><label>Condições relatadas</label><input type="text" value={f.comorbidades} onChange={(e) => set("comorbidades", e.target.value)} placeholder="Nenhuma relatada / comorbidades…" /></div>
+          <div className="field">
+            <label>Início do tratamento</label>
+            <input type="date" value={f.inicio} onChange={(e) => set("inicio", e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Objetivo</label>
+            <input type="text" maxLength={300} value={f.objetivo} onChange={(e) => set("objetivo", e.target.value)} placeholder="Emagrecimento e controle metabólico…" />
+          </div>
+          <div className="field">
+            <label>Condições relatadas</label>
+            <input type="text" maxLength={300} value={f.comorbidades} onChange={(e) => set("comorbidades", e.target.value)} placeholder="Nenhuma relatada / comorbidades…" />
+          </div>
         </div>
       </div>
 
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
         <button className="btn btn-ghost" onClick={() => navegar("pacientes")}>Cancelar</button>
-        <button className="btn btn-primary" onClick={salvar} disabled={salvando} style={{ opacity: salvando ? 0.7 : 1 }}>{salvando ? "Salvando…" : "Salvar paciente"}</button>
+        <button className="btn btn-primary" onClick={salvar} disabled={salvando} style={{ opacity: salvando ? 0.7 : 1 }}>
+          {salvando ? "Salvando…" : "Salvar paciente"}
+        </button>
       </div>
     </div>
   );
