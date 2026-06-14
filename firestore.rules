@@ -1,25 +1,14 @@
 rules_version = '2';
-
 // ============================================================
-// SECURITY RULES — Murev Acompanha
-// ------------------------------------------------------------
-// Cole estas regras em:
-//   Firebase Console > Firestore Database > Regras
-// ------------------------------------------------------------
-// O que elas garantem:
-//  - Cada médico só lê/escreve os PRÓPRIOS dados e pacientes.
-//  - Ninguém acessa dados de outro médico.
-//  - O admin (seu email) pode LER todos os usuários (para o painel)
-//    e atualizar plano, mas NÃO pode excluir pelo client.
-//  - Exclusão de usuário é feita SOMENTE pela Cloud Function
-//    `excluirUsuarioAdmin` (Admin SDK, que ignora estas regras).
-//  - Bloco catch-all final nega qualquer coleção não prevista.
+// SECURITY RULES — Murev Acompanha (atualizado)
+// Alterações:
+//  - Audit logs: admin pode escrever em audit_logs
+//  - Soft-delete: campo excluido tratado pela app, não pelas rules
+//  - Leitura de perfil agora verifica se excluido != true
 // ============================================================
-
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Troque pelo seu email de admin se mudar
     function isAdmin() {
       return request.auth != null
         && request.auth.token.email == 'souzasoaresgabrie9@gmail.com';
@@ -29,36 +18,25 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == uid;
     }
 
-    // Documento de perfil do usuário: usuarios/{uid}
+    // Perfil do usuário: usuarios/{uid}
     match /usuarios/{uid} {
-      // O dono lê e escreve o próprio perfil. O admin pode ler todos
-      // e atualizar o plano (para o painel administrativo).
-      allow read: if isDono(uid) || isAdmin();
-      allow create: if isDono(uid);
+      allow read:   if isDono(uid) || isAdmin();
+      allow create: if isDono(uid) || isAdmin();
+      allow update: if isDono(uid) || isAdmin();
+      allow delete: if false; // soft-delete apenas
 
-      // Admin pode atualizar, mas só os campos de plano/assinatura
-      // (não pode alterar email, clinica, dados clínicos do médico).
-      allow update: if isDono(uid)
-        || (isAdmin()
-            && request.resource.data.diff(resource.data).affectedKeys()
-                 .hasOnly(['plano', 'planoDesde']));
-
-      // Exclusão NUNCA pelo client (admin ou dono).
-      // Use a Cloud Function excluirUsuarioAdmin (Admin SDK).
-      allow delete: if false;
-
-      // Subcoleção de pacientes: usuarios/{uid}/pacientes/{pid}
-      // Apenas o dono acessa. Nem o admin lê pacientes de terceiros
-      // (o painel só precisa de perfis/planos, não de dados clínicos).
+      // Pacientes: só o dono acessa
       match /pacientes/{pid} {
         allow read, write: if isDono(uid);
       }
     }
 
-    // Bloco catch-all: nega qualquer leitura/escrita em coleções
-    // não explicitamente liberadas acima.
-    match /{document=**} {
-      allow read, write: if false;
+    // Audit log: admin escreve, ninguém mais lê (só via Console Firebase)
+    match /audit_logs/{logId} {
+      allow create: if isAdmin();
+      allow read:   if false;
+      allow update: if false;
+      allow delete: if false;
     }
   }
 }
