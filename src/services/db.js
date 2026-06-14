@@ -1,36 +1,22 @@
 // src/services/db.js
-// Camada de dados sobre o Firestore.
-// Alterações em relação à Fase 3:
-//  - Soft-delete: excluirUsuario marca excluido:true em vez de deleteDoc
-//  - Audit log: toda ação de admin grava em audit_logs/{uid_admin}_{timestamp}
-//  - criarPerfilSeNovo: salva campo `origem` (default "direto")
-//  - listarTodosUsuarios: filtra excluidos por padrão
+// Adição: contarPacientesPorUsuario — usado pelo painel admin
 
 import {
   collection, doc, getDoc, getDocs, setDoc, addDoc, updateDoc,
-  deleteDoc, query, orderBy, where, serverTimestamp,
+  deleteDoc, query, orderBy, serverTimestamp,
 } from "firebase/firestore";
 import { db } from "./firebase.js";
-import { ADMIN_EMAIL } from "./firebase.js";
 
 // ─── Audit Log ───────────────────────────────────────────────
-// Grava na coleção audit_logs toda ação administrativa sensível.
 async function auditLog(adminUid, acao, alvoUid, detalhes = {}) {
   try {
     await addDoc(collection(db, "audit_logs"), {
-      adminUid,
-      acao,          // ex: "alterar_plano", "excluir_usuario", "criar_usuario"
-      alvoUid,
-      detalhes,
-      timestamp: serverTimestamp(),
+      adminUid, acao, alvoUid, detalhes, timestamp: serverTimestamp(),
     });
-  } catch (e) {
-    // Nunca deixa o audit log quebrar a ação principal
-    console.warn("audit_log falhou:", e);
-  }
+  } catch (e) { console.warn("audit_log falhou:", e); }
 }
 
-// ─── PERFIL DO USUÁRIO ────────────────────────────────────────
+// ─── PERFIL ───────────────────────────────────────────────────
 export async function getPerfil(uid) {
   const snap = await getDoc(doc(db, "usuarios", uid));
   return snap.exists() ? { id: snap.id, ...snap.data() } : null;
@@ -41,16 +27,10 @@ export async function criarPerfilSeNovo(user, origem = "direto") {
   const snap = await getDoc(ref);
   if (!snap.exists()) {
     const perfil = {
-      email: user.email,
-      nome: user.displayName || "",
-      clinica: "Minha Clínica",
-      medico: "",
-      crm: "",
-      plano: "nenhum",
-      criadoEm: serverTimestamp(),
-      planoDesde: null,
-      origem,          // "webhook" | "admin" | "direto"
-      excluido: false,
+      email: user.email, nome: user.displayName || "",
+      clinica: "Minha Clínica", medico: "", crm: "",
+      plano: "nenhum", criadoEm: serverTimestamp(), planoDesde: null,
+      origem, excluido: false,
     };
     await setDoc(ref, perfil);
     return { id: user.uid, ...perfil };
@@ -60,18 +40,13 @@ export async function criarPerfilSeNovo(user, origem = "direto") {
 
 export async function salvarConfigUsuario(uid, config) {
   await updateDoc(doc(db, "usuarios", uid), {
-    clinica: config.clinica,
-    medico: config.medico,
-    crm: config.crm,
-    logo: config.logo || null,
-    murevNoPdf: config.murevNoPdf !== false,
+    clinica: config.clinica, medico: config.medico, crm: config.crm,
+    logo: config.logo || null, murevNoPdf: config.murevNoPdf !== false,
   });
 }
 
 // ─── PACIENTES ────────────────────────────────────────────────
-function pacientesCol(uid) {
-  return collection(db, "usuarios", uid, "pacientes");
-}
+function pacientesCol(uid) { return collection(db, "usuarios", uid, "pacientes"); }
 
 export async function listarPacientes(uid) {
   const q = query(pacientesCol(uid), orderBy("criadoEm", "desc"));
@@ -115,32 +90,41 @@ export async function listarTodosUsuarios(incluirExcluidos = false) {
     .filter((u) => incluirExcluidos || !u.excluido);
 }
 
-export async function definirPlano(uid, plano, adminUid = null) {
-  await updateDoc(doc(db, "usuarios", uid), {
-    plano,
-    planoDesde: serverTimestamp(),
-  });
-  if (adminUid) {
-    await auditLog(adminUid, "alterar_plano", uid, { plano });
-  }
+// ✅ NOVO — conta pacientes (e ativos) por usuário. Recebe lista de uids.
+// Retorna { [uid]: { total, ativos } }
+export async function contarPacientesPorUsuario(uids) {
+  const resultado = {};
+  await Promise.all(uids.map(async (uid) => {
+    try {
+      const snap = await getDocs(pacientesCol(uid));
+      let ativos = 0;
+      snap.docs.forEach((d) => { if (d.data().ativo !== false) ativos++; });
+      resultado[uid] = { total: snap.size, ativos };
+    } catch (e) {
+      console.warn("contarPacientes falhou para", uid, e);
+      resultado[uid] = { total: 0, ativos: 0 };
+    }
+  }));
+  return resultado;
 }
 
-// Soft-delete: marca excluido:true, preserva dados clínicos
+export async function definirPlano(uid, plano, adminUid = null) {
+  await updateDoc(doc(db, "usuarios", uid), {
+    plano, planoDesde: serverTimestamp(),
+  });
+  if (adminUid) await auditLog(adminUid, "alterar_plano", uid, { plano });
+}
+
 export async function excluirUsuario(uid, adminUid) {
   await updateDoc(doc(db, "usuarios", uid), {
-    excluido: true,
-    excluidoEm: serverTimestamp(),
-    excluidoPor: adminUid,
+    excluido: true, excluidoEm: serverTimestamp(), excluidoPor: adminUid,
   });
   await auditLog(adminUid, "excluir_usuario", uid);
 }
 
-// Restaura usuário excluído
 export async function restaurarUsuario(uid, adminUid) {
   await updateDoc(doc(db, "usuarios", uid), {
-    excluido: false,
-    excluidoEm: null,
-    excluidoPor: null,
+    excluido: false, excluidoEm: null, excluidoPor: null,
   });
   await auditLog(adminUid, "restaurar_usuario", uid);
 }
