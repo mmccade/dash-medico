@@ -1,5 +1,10 @@
 // src/screens/NovoCiclo.jsx
-// Alteração: confirmação ao clicar "Voltar" ou "Cancelar" se peso já foi preenchido
+// Alterações:
+//  - Campo "Mês de referência" virou "Data de referência" (DD/MM/AAAA via input type=date)
+//  - Titulação MG: máscara 0,0 com até 3 dígitos (ex: 2,5 / 10,0) — máx 99,9
+//  - Titulação UI: apenas inteiros, máx 2 dígitos (1-99)
+//  - Suplementação, colaterais, obs: tipo text/textarea sem inputMode=decimal
+//  - Confirmação ao sair se dados preenchidos
 
 import { useState } from "react";
 import { ArrowLeft } from "lucide-react";
@@ -8,21 +13,105 @@ import { useToast } from "../lib/toast.jsx";
 import { parseNum } from "../lib/utils.js";
 import { validateCiclo, primeiroErro } from "../lib/validate.js";
 
+// Converte "DD/MM/AAAA" → "AAAA-MM-DD" para salvar
+function brParaIso(s) {
+  if (!s) return "";
+  const [d, m, a] = s.split("/");
+  if (!d || !m || !a) return s;
+  return `${a}-${m.padStart(2,"0")}-${d.padStart(2,"0")}`;
+}
+
+// Converte "AAAA-MM-DD" → "DD/MM/AAAA" para exibir
+function isoParaBr(s) {
+  if (!s) return "";
+  const [a, m, d] = s.split("-");
+  if (!d) return s;
+  return `${d}/${m}/${a}`;
+}
+
+// Label curto para o accordion: "Mai/26" a partir de "2026-05-08"
+function labelMes(iso) {
+  if (!iso) return "";
+  try {
+    const d = new Date(iso + "T12:00:00");
+    const meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
+    return `${meses[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`;
+  } catch { return iso; }
+}
+
+// ─── Input MG: aceita 0,0 / 0,5 / 2,5 / 10,0 — máx 99,9 ──────
+function InputMG({ value, onChange }) {
+  const handleChange = (e) => {
+    let v = e.target.value;
+    // Permite só dígitos e vírgula/ponto
+    v = v.replace(/[^0-9.,]/g, "");
+    // Normaliza separador
+    v = v.replace(".", ",");
+    // Apenas uma vírgula
+    const partes = v.split(",");
+    if (partes.length > 2) v = partes[0] + "," + partes.slice(1).join("");
+    // Parte inteira máx 2 dígitos
+    if (partes[0].length > 2) partes[0] = partes[0].slice(0, 2);
+    // Parte decimal máx 1 dígito
+    if (partes[1] !== undefined) partes[1] = partes[1].slice(0, 1);
+    v = partes.join(partes.length > 1 ? "," : "");
+    // Valor numérico máx 99,9
+    const num = parseFloat(v.replace(",", "."));
+    if (!isNaN(num) && num > 99.9) return;
+    onChange(v);
+  };
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={value}
+      onChange={handleChange}
+      placeholder="2,5"
+      style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 14 }}
+    />
+  );
+}
+
+// ─── Input UI: apenas inteiros 1-99 ────────────────────────────
+function InputUI({ value, onChange }) {
+  const handleChange = (e) => {
+    let v = e.target.value.replace(/[^0-9]/g, "").slice(0, 2);
+    if (v !== "" && parseInt(v) > 99) v = "99";
+    onChange(v);
+  };
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      value={value}
+      onChange={handleChange}
+      placeholder="20"
+      style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 14 }}
+    />
+  );
+}
+
 export default function NovoCiclo({ pacienteId, navegar }) {
   const { getPaciente, addCiclo } = useStore();
   const toast = useToast();
   const p = getPaciente(pacienteId);
+
+  const hoje = new Date().toISOString().slice(0, 10);
   const [f, setF] = useState({
-    mes: "", peso: "", gordura: "", visceral: "",
+    data: hoje,   // AAAA-MM-DD internamente
+    peso: "", gordura: "", visceral: "",
     unidade: "MG", d1: "", d2: "", d3: "", d4: "",
     local: "Casa", suplementacao: "", colaterais: "", obs: "",
   });
+
   if (!p) { navegar("pacientes"); return null; }
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
-  const un = f.unidade.toLowerCase();
+  const isMG = f.unidade === "MG";
   const [salvando, setSalvando] = useState(false);
 
-  const temDados = f.peso || f.mes || f.obs.trim();
+  const temDados = f.peso || f.obs.trim();
 
   const voltar = () => {
     if (temDados && !window.confirm("Descartar os dados preenchidos e voltar?")) return;
@@ -30,10 +119,21 @@ export default function NovoCiclo({ pacienteId, navegar }) {
   };
 
   const salvar = async () => {
+    // Monta label do mês a partir da data
+    const mesLabel = labelMes(f.data) || isoParaBr(f.data);
+
     const rawCiclo = {
-      mes: f.mes, peso: f.peso, gordura: f.gordura, visceral: f.visceral,
-      unidade: f.unidade, doses: [f.d1, f.d2, f.d3, f.d4].map(parseNum),
-      local: f.local, suplementacao: f.suplementacao, colaterais: f.colaterais, obs: f.obs,
+      mes: mesLabel,
+      data: f.data,
+      peso: f.peso,
+      gordura: f.gordura,
+      visceral: f.visceral,
+      unidade: f.unidade,
+      doses: [f.d1, f.d2, f.d3, f.d4].map((d) => parseNum(d)),
+      local: f.local,
+      suplementacao: f.suplementacao,
+      colaterais: f.colaterais,
+      obs: f.obs,
     };
     const { data, errors } = validateCiclo(rawCiclo);
     if (errors.length) { toast(primeiroErro(errors)); return; }
@@ -58,7 +158,21 @@ export default function NovoCiclo({ pacienteId, navegar }) {
 
       <Secao titulo="Medições do mês">
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 14 }}>
-          <Campo label="Mês de referência *" tipo="text" v={f.mes} on={(v) => set("mes", v)} ph="Mai/26" max={20} />
+          {/* Data DD/MM/AAAA */}
+          <div className="field" style={{ gridColumn: "1 / -1" }}>
+            <label>Data de referência *</label>
+            <input
+              type="date"
+              value={f.data}
+              onChange={(e) => set("data", e.target.value)}
+              style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 14 }}
+            />
+            {f.data && (
+              <span style={{ fontSize: 12, color: "var(--inkFaint)", marginTop: 4, display: "block" }}>
+                {isoParaBr(f.data)} · ciclo: {labelMes(f.data)}
+              </span>
+            )}
+          </div>
           <Campo label="Peso (kg) *" tipo="number" v={f.peso} on={(v) => set("peso", v)} ph="78,5" min={20} max={400} />
           <Campo label="% Gordura" tipo="number" v={f.gordura} on={(v) => set("gordura", v)} ph="34,0" min={0} max={100} />
           <Campo label="Gordura visceral" tipo="number" v={f.visceral} on={(v) => set("visceral", v)} ph="9" min={0} max={50} />
@@ -68,13 +182,22 @@ export default function NovoCiclo({ pacienteId, navegar }) {
       <Secao titulo="Titulação da dose">
         <div style={{ marginBottom: 16 }}>
           <label style={{ fontSize: 12.5, color: "var(--inkSoft)", fontWeight: 600, display: "block", marginBottom: 7 }}>Unidade</label>
-          <Segment opcoes={["MG", "UI"]} valor={f.unidade} on={(v) => set("unidade", v)} />
+          <Segment opcoes={["MG", "UI"]} valor={f.unidade} on={(v) => { set("unidade", v); set("d1",""); set("d2",""); set("d3",""); set("d4",""); }} />
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 10 }}>
-          {[["d1", "Semana 1"], ["d2", "Semana 2"], ["d3", "Semana 3"], ["d4", "Semana 4"]].map(([k, l]) => (
-            <Campo key={k} label={l} tipo="number" v={f[k]} on={(v) => set(k, v)} ph={un === "mg" ? "2,5" : "20"} min={0} max={100} />
+          {[["d1","Semana 1"],["d2","Semana 2"],["d3","Semana 3"],["d4","Semana 4"]].map(([k, l]) => (
+            <div key={k} className="field">
+              <label>{l}</label>
+              {isMG
+                ? <InputMG value={f[k]} onChange={(v) => set(k, v)} />
+                : <InputUI value={f[k]} onChange={(v) => set(k, v)} />
+              }
+            </div>
           ))}
         </div>
+        <p style={{ fontSize: 12, color: "var(--inkFaint)", marginTop: 10 }}>
+          {isMG ? "MG: formato X,X — ex: 2,5 · 5,0 · 10,0 (máx 99,9)" : "UI: apenas inteiros — ex: 20 · 40 (máx 99)"}
+        </p>
       </Secao>
 
       <Secao titulo="Aplicação e adesão">
