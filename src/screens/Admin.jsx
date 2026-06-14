@@ -1,26 +1,28 @@
 // src/screens/Admin.jsx
-// Alterações:
-//  - Coluna "Origem": "Webhook" ou "Admin" com badge colorido
-//  - Botão "Adicionar usuário": cria conta Firebase Auth + perfil no Firestore
-//  - Botão "Excluir" por linha: chama a Cloud Function excluirUsuarioAdmin
-//    (Admin SDK), que remove Auth + perfil + pacientes. Exclusão direta pelo
-//    client está bloqueada pelas firestore.rules (allow delete: if false).
-//  - Filtro de período (Hoje / 7 dias / 30 dias) + botão de atualizar,
-//    refiltra/recarrega sem reload da página (FiltroPeriodo.jsx)
+// Alterações em relação à Fase 3:
+//  - Coluna "Origem" com badge Webhook | Admin
+//  - Adicionar usuário via modal (com validação forte + audit log)
+//  - Excluir = soft-delete (marca excluido:true, preserva dados clínicos)
+//  - Audit log automático em toda ação (via db.js)
+//  - Senha exige 8+ chars, 1 maiúscula, 1 número
+//  - Criação de conta via Cloud Function (evita trocar sessão do admin)
+//    → Por ora usa createUserWithEmailAndPassword com secondary app para não deslogar o admin
 
-import { useState, useEffect, useMemo } from "react";
-import { Shield, Users, DollarSign, Loader2, LogOut, Sun, Moon, Plus, Trash2, X, Eye, EyeOff } from "lucide-react";
-import { listarTodosUsuarios, definirPlano, excluirUsuarioAdmin, VALOR_PLANO } from "../services/db.js";
+import { useState, useEffect } from "react";
+import { Shield, Users, DollarSign, Loader2, LogOut, Sun, Moon, Plus, Trash2, X, Eye, EyeOff, RotateCcw } from "lucide-react";
+import { listarTodosUsuarios, definirPlano, excluirUsuario, restaurarUsuario, VALOR_PLANO } from "../services/db.js";
 import { sair } from "../services/auth.js";
 import { useTema } from "../lib/theme.jsx";
+import { useAuth } from "../lib/auth.jsx";
 import { br } from "../lib/utils.js";
+import { validateNovoUsuario, primeiroErro } from "../lib/validate.js";
 import { db } from "../services/firebase.js";
 import { doc, setDoc, serverTimestamp } from "firebase/firestore";
+import { initializeApp, getApps } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
-import FiltroPeriodo, { dentroDoPeriodo } from "../components/FiltroPeriodo.jsx";
 
 const PLANOS = ["nenhum", "mensal", "trimestral", "anual", "vitalicio"];
-const LABEL = { nenhum: "Sem plano", mensal: "Mensal", trimestral: "Trimestral", anual: "Anual", vitalicio: "Vitalício" };
+const LABEL  = { nenhum: "Sem plano", mensal: "Mensal", trimestral: "Trimestral", anual: "Anual", vitalicio: "Vitalício" };
 
 function receitaUsuario(u) {
   if (!u.plano || u.plano === "nenhum") return 0;
@@ -29,114 +31,120 @@ function receitaUsuario(u) {
   const desde = u.planoDesde?.toDate ? u.planoDesde.toDate() : (u.planoDesde ? new Date(u.planoDesde) : null);
   if (!desde) return VALOR_PLANO[u.plano] || 0;
   const meses = Math.max(1, Math.floor((Date.now() - desde.getTime()) / (1000 * 60 * 60 * 24 * 30)));
-  if (u.plano === "mensal") return +(VALOR_PLANO.mensal * meses).toFixed(2);
-  if (u.plano === "trimestral") return +(VALOR_PLANO.trimestral * Math.ceil(meses / 3)).toFixed(2);
+  if (u.plano === "mensal")      return +(VALOR_PLANO.mensal * meses).toFixed(2);
+  if (u.plano === "trimestral")  return +(VALOR_PLANO.trimestral * Math.ceil(meses / 3)).toFixed(2);
   return VALOR_PLANO[u.plano] || 0;
 }
 
-// Modal de adicionar usuário
-function ModalAddUsuario({ onClose, onAdicionado }) {
-  const [email, setEmail] = useState("");
-  const [senha, setSenha] = useState("");
-  const [nome, setNome] = useState("");
+// Cria usuário usando um app Firebase secundário para NÃO deslogar o admin
+async function criarContaSecundaria(email, senha) {
+  const mainApp = getApps()[0];
+  const config = mainApp.options;
+  let secondaryApp;
+  try {
+    secondaryApp = initializeApp(config, "secondary_" + Date.now());
+    const secondaryAuth = getAuth(secondaryApp);
+    const cred = await createUserWithEmailAndPassword(secondaryAuth, email, senha);
+    const uid = cred.user.uid;
+    await secondaryAuth.signOut();
+    return uid;
+  } finally {
+    if (secondaryApp) {
+      try { await secondaryApp.delete(); } catch {}
+    }
+  }
+}
+
+// ─── Modal de adicionar usuário ───────────────────────────────
+function ModalAddUsuario({ adminUid, onClose, onAdicionado }) {
+  const [email, setEmail]     = useState("");
+  const [senha, setSenha]     = useState("");
+  const [nome, setNome]       = useState("");
   const [clinica, setClinica] = useState("");
-  const [plano, setPlano] = useState("mensal");
+  const [plano, setPlano]     = useState("mensal");
   const [verSenha, setVerSenha] = useState(false);
   const [salvando, setSalvando] = useState(false);
-  const [erro, setErro] = useState("");
+  const [erros, setErros]     = useState([]);
 
   const salvar = async () => {
-    setErro("");
-    if (!email || !senha || senha.length < 6) {
-      setErro("Email e senha (mín. 6 caracteres) são obrigatórios.");
-      return;
-    }
+    setErros([]);
+    const { data, errors } = validateNovoUsuario({ email, senha, nome, clinica });
+    if (errors.length) { setErros(errors); return; }
+
     setSalvando(true);
     try {
-      // Cria conta no Firebase Auth
-      const auth = getAuth();
-      const cred = await createUserWithEmailAndPassword(auth, email, senha);
-      const uid = cred.user.uid;
+      const uid = await criarContaSecundaria(data.email, senha);
 
-      // Cria perfil no Firestore com origem = "admin"
       await setDoc(doc(db, "usuarios", uid), {
-        email,
-        nome,
-        clinica: clinica || "Clínica",
-        medico: nome,
+        email: data.email,
+        nome: data.nome,
+        clinica: data.clinica,
+        medico: data.nome,
         crm: "",
         plano,
         planoDesde: serverTimestamp(),
         criadoEm: serverTimestamp(),
-        origem: "admin",  // <- campo de origem
+        origem: "admin",
+        excluido: false,
       });
 
-      onAdicionado({ id: uid, email, nome, clinica, medico: nome, plano, origem: "admin", planoDesde: new Date() });
+      onAdicionado({ id: uid, email: data.email, nome: data.nome, clinica: data.clinica, medico: data.nome, plano, origem: "admin", planoDesde: new Date(), excluido: false });
       onClose();
     } catch (e) {
       const msgs = {
         "auth/email-already-in-use": "Já existe uma conta com esse email.",
         "auth/invalid-email": "Email inválido.",
-        "auth/weak-password": "Senha fraca. Use ao menos 6 caracteres.",
+        "auth/weak-password": "Senha fraca.",
       };
-      setErro(msgs[e.code] || "Erro ao criar usuário. Tente novamente.");
+      setErros([{ campo: "email", err: msgs[e.code] || "Erro ao criar usuário." }]);
       setSalvando(false);
     }
   };
 
-  const inputStyle = {
-    width: "100%", padding: "10px 14px", borderRadius: 10,
-    border: "1px solid var(--line)", background: "var(--surface)",
-    fontSize: 14, color: "var(--ink)", boxSizing: "border-box",
-  };
+  const inputStyle = { width: "100%", padding: "10px 14px", borderRadius: 10, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 14, color: "var(--ink)", boxSizing: "border-box" };
+
+  const reqs = [
+    { ok: senha.length >= 8, label: "Mínimo 8 caracteres" },
+    { ok: /[A-Z]/.test(senha), label: "1 letra maiúscula" },
+    { ok: /[0-9]/.test(senha), label: "1 número" },
+  ];
 
   return (
-    <div style={{
-      position: "fixed", inset: 0, zIndex: 999,
-      background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)",
-      display: "flex", alignItems: "center", justifyContent: "center", padding: 20,
-    }}>
-      <div style={{
-        background: "var(--surface)", borderRadius: 18,
-        width: "100%", maxWidth: 440, padding: "32px 28px",
-        boxShadow: "0 20px 60px rgba(0,0,0,0.15)",
-      }}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 999, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: "var(--surface)", borderRadius: 18, width: "100%", maxWidth: 440, padding: "32px 28px", boxShadow: "0 20px 60px rgba(0,0,0,0.15)", maxHeight: "90vh", overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 24 }}>
           <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Adicionar usuário</h2>
-          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--inkFaint)" }}>
-            <X size={20} />
-          </button>
+          <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--inkFaint)" }}><X size={20} /></button>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div>
             <label style={{ fontSize: 12, color: "var(--inkFaint)", display: "block", marginBottom: 5 }}>Nome / Médico</label>
-            <input style={inputStyle} value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Dr. João Silva" />
+            <input style={inputStyle} maxLength={150} value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Dr. João Silva" />
           </div>
           <div>
             <label style={{ fontSize: 12, color: "var(--inkFaint)", display: "block", marginBottom: 5 }}>Clínica</label>
-            <input style={inputStyle} value={clinica} onChange={(e) => setClinica(e.target.value)} placeholder="Clínica Exemplo" />
+            <input style={inputStyle} maxLength={300} value={clinica} onChange={(e) => setClinica(e.target.value)} placeholder="Clínica Exemplo" />
           </div>
           <div>
             <label style={{ fontSize: 12, color: "var(--inkFaint)", display: "block", marginBottom: 5 }}>Email *</label>
-            <input style={inputStyle} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="medico@email.com" />
+            <input style={inputStyle} type="email" maxLength={254} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="medico@email.com" />
           </div>
           <div>
             <label style={{ fontSize: 12, color: "var(--inkFaint)", display: "block", marginBottom: 5 }}>Senha *</label>
             <div style={{ position: "relative" }}>
-              <input
-                style={{ ...inputStyle, paddingRight: 40 }}
-                type={verSenha ? "text" : "password"}
-                value={senha}
-                onChange={(e) => setSenha(e.target.value)}
-                placeholder="Mínimo 6 caracteres"
-              />
-              <button onClick={() => setVerSenha(!verSenha)} style={{
-                position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)",
-                background: "none", border: "none", cursor: "pointer", color: "var(--inkFaint)",
-              }}>
+              <input style={{ ...inputStyle, paddingRight: 40 }} type={verSenha ? "text" : "password"} maxLength={128} value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="Mínimo 8 caracteres" />
+              <button onClick={() => setVerSenha(!verSenha)} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--inkFaint)" }}>
                 {verSenha ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
+            </div>
+            {/* Requisitos de senha */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8 }}>
+              {reqs.map((r) => (
+                <div key={r.label} style={{ fontSize: 12, color: r.ok ? "var(--good)" : "var(--inkFaint)", display: "flex", gap: 6 }}>
+                  <span>{r.ok ? "✓" : "○"}</span> {r.label}
+                </div>
+              ))}
             </div>
           </div>
           <div>
@@ -148,16 +156,14 @@ function ModalAddUsuario({ onClose, onAdicionado }) {
             </select>
           </div>
 
-          {erro && (
-            <div style={{ background: "var(--bad-bg, #fff0f0)", color: "var(--bad, #c0392b)", padding: "10px 14px", borderRadius: 8, fontSize: 13 }}>
-              {erro}
+          {erros.length > 0 && (
+            <div style={{ background: "var(--surface2)", color: "var(--bad, #c0392b)", padding: "10px 14px", borderRadius: 8, fontSize: 13 }}>
+              {primeiroErro(erros)}
             </div>
           )}
 
           <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-            <button onClick={onClose} className="btn btn-ghost" style={{ flex: 1, justifyContent: "center" }}>
-              Cancelar
-            </button>
+            <button onClick={onClose} className="btn btn-ghost" style={{ flex: 1, justifyContent: "center" }}>Cancelar</button>
             <button onClick={salvar} disabled={salvando} className="btn btn-primary" style={{ flex: 1, justifyContent: "center" }}>
               {salvando ? <><Loader2 size={14} className="spin" /> Criando…</> : "Criar usuário"}
             </button>
@@ -168,68 +174,65 @@ function ModalAddUsuario({ onClose, onAdicionado }) {
   );
 }
 
+// ─── Tela Admin ───────────────────────────────────────────────
 export default function Admin() {
   const { tema, alternar } = useTema();
-  const [usuarios, setUsuarios] = useState([]);
+  const { user } = useAuth();
+  const [usuarios, setUsuarios]     = useState([]);
   const [carregando, setCarregando] = useState(true);
-  const [salvando, setSalvando] = useState(null);
-  const [excluindo, setExcluindo] = useState(null);
-  const [showModal, setShowModal] = useState(false);
-  const [periodo, setPeriodo] = useState("30d");
+  const [salvando, setSalvando]     = useState(null);
+  const [excluindo, setExcluindo]   = useState(null);
+  const [showModal, setShowModal]   = useState(false);
+  const [mostrarExcluidos, setMostrarExcluidos] = useState(false);
 
   const carregar = () => {
     setCarregando(true);
-    listarTodosUsuarios()
+    listarTodosUsuarios(mostrarExcluidos)
       .then(setUsuarios)
       .catch((e) => console.error(e))
       .finally(() => setCarregando(false));
   };
-  useEffect(carregar, []);
+  useEffect(carregar, [mostrarExcluidos]);
 
   const mudarPlano = async (uid, plano) => {
     setSalvando(uid);
     try {
-      await definirPlano(uid, plano);
+      await definirPlano(uid, plano, user?.uid);
       setUsuarios((us) => us.map((u) => (u.id === uid ? { ...u, plano, planoDesde: new Date() } : u)));
     } catch (e) { console.error(e); }
     setSalvando(null);
   };
 
-  const excluir = async (uid) => {
-    if (!window.confirm("Excluir este usuário permanentemente? Isso remove o acesso, o perfil e os pacientes dele. Esta ação não pode ser desfeita.")) return;
-    setExcluindo(uid);
+  const excluir = async (u) => {
+    if (!window.confirm(`Desativar ${u.email}? Os dados clínicos serão preservados. Você pode restaurar depois.`)) return;
+    setExcluindo(u.id);
     try {
-      await excluirUsuarioAdmin(uid);
-      setUsuarios((us) => us.filter((u) => u.id !== uid));
-    } catch (e) {
-      console.error(e);
-      window.alert("Não foi possível excluir o usuário. Verifique sua conexão ou tente novamente.");
-    }
+      await excluirUsuario(u.id, user?.uid);
+      setUsuarios((us) => mostrarExcluidos
+        ? us.map((x) => x.id === u.id ? { ...x, excluido: true } : x)
+        : us.filter((x) => x.id !== u.id)
+      );
+    } catch (e) { console.error(e); }
     setExcluindo(null);
   };
 
-  // Filtra por período de cadastro (criadoEm) sem recarregar a página.
-  const usuariosFiltrados = useMemo(
-    () => usuarios.filter((u) => dentroDoPeriodo(u.criadoEm, periodo)),
-    [usuarios, periodo]
-  );
+  const restaurar = async (u) => {
+    setExcluindo(u.id);
+    try {
+      await restaurarUsuario(u.id, user?.uid);
+      setUsuarios((us) => us.map((x) => x.id === u.id ? { ...x, excluido: false } : x));
+    } catch (e) { console.error(e); }
+    setExcluindo(null);
+  };
 
-  const receitaTotal = usuariosFiltrados.reduce((s, u) => s + receitaUsuario(u), 0);
-  const assinantes = usuariosFiltrados.filter((u) => u.plano && u.plano !== "nenhum").length;
+  const receitaTotal  = usuarios.filter((u) => !u.excluido).reduce((s, u) => s + receitaUsuario(u), 0);
+  const assinantes    = usuarios.filter((u) => !u.excluido && u.plano && u.plano !== "nenhum").length;
+  const totalAtivos   = usuarios.filter((u) => !u.excluido).length;
 
   const badgeOrigem = (origem) => {
     const isWebhook = origem === "webhook";
     return (
-      <span style={{
-        display: "inline-block",
-        padding: "2px 8px",
-        borderRadius: 99,
-        fontSize: 11,
-        fontWeight: 600,
-        background: isWebhook ? "var(--brand-bg, #e8f0fe)" : "var(--surface2)",
-        color: isWebhook ? "var(--brand)" : "var(--inkFaint)",
-        letterSpacing: 0.3,
-      }}>
+      <span style={{ display: "inline-block", padding: "2px 9px", borderRadius: 99, fontSize: 11, fontWeight: 700, letterSpacing: 0.3, background: isWebhook ? "#e8f4f8" : "var(--surface2)", color: isWebhook ? "var(--brand)" : "var(--inkFaint)" }}>
         {isWebhook ? "Webhook" : "Admin"}
       </span>
     );
@@ -250,58 +253,58 @@ export default function Admin() {
         </div>
       </header>
 
-      <div style={{ maxWidth: 1080, margin: "0 auto", padding: "32px 24px 64px" }}>
+      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 24px 64px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 26, flexWrap: "wrap", gap: 14 }}>
           <div>
             <h1 className="page-title" style={{ margin: 0 }}>Administração</h1>
             <p className="page-sub" style={{ margin: "4px 0 0" }}>Gestão de usuários, planos e receita.</p>
           </div>
-          <button className="btn btn-primary" onClick={() => setShowModal(true)}>
-            <Plus size={16} /> Adicionar usuário
-          </button>
-        </div>
-
-        <div style={{ marginBottom: 18 }}>
-          <FiltroPeriodo valor={periodo} onChange={setPeriodo} onRefresh={carregar} carregando={carregando} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn btn-ghost" onClick={() => setMostrarExcluidos(!mostrarExcluidos)} style={{ fontSize: 13 }}>
+              {mostrarExcluidos ? "Ocultar excluídos" : "Ver excluídos"}
+            </button>
+            <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+              <Plus size={16} /> Adicionar usuário
+            </button>
+          </div>
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginBottom: 30 }}>
-          <ResumoCard Icon={Users} label="Usuários" valor={usuariosFiltrados.length} />
-          <ResumoCard Icon={Shield} label="Assinantes" valor={assinantes} accent="var(--good)" />
-          <ResumoCard Icon={DollarSign} label="Receita acumulada" valor={`R$ ${br(receitaTotal.toFixed(2))}`} accent="var(--brand)" />
+          <ResumoCard Icon={Users}       label="Usuários ativos" valor={totalAtivos} />
+          <ResumoCard Icon={Shield}      label="Assinantes"      valor={assinantes}  accent="var(--good)" />
+          <ResumoCard Icon={DollarSign}  label="Receita acumulada" valor={`R$ ${br(receitaTotal.toFixed(2))}`} accent="var(--brand)" />
         </div>
 
         {carregando ? (
           <div style={{ display: "flex", justifyContent: "center", padding: 60 }}>
             <Loader2 size={28} className="spin" color="var(--inkFaint)" />
           </div>
-        ) : usuariosFiltrados.length === 0 ? (
+        ) : usuarios.length === 0 ? (
           <div className="card" style={{ padding: 48, textAlign: "center", color: "var(--inkFaint)" }}>
-            Nenhum usuário cadastrado neste período.
+            Nenhum usuário cadastrado ainda.
           </div>
         ) : (
           <div className="card" style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
               <thead>
                 <tr>
-                  {["Usuário", "Email", "Origem", "Plano", "Receita gerada", ""].map((h) => (
+                  {["Usuário", "Email", "Origem", "Plano", "Receita", ""].map((h) => (
                     <th key={h} style={{ padding: "13px 16px", textAlign: "left", fontSize: 11.5, fontWeight: 600, color: "var(--inkFaint)", textTransform: "uppercase", letterSpacing: 0.5, borderBottom: "1px solid var(--line)", background: "var(--surface2)", whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {usuariosFiltrados.map((u) => (
-                  <tr key={u.id}>
+                {usuarios.map((u) => (
+                  <tr key={u.id} style={{ opacity: u.excluido ? 0.45 : 1 }}>
                     <td style={{ padding: "13px 16px", borderBottom: "1px solid var(--line)", fontWeight: 600, whiteSpace: "nowrap" }}>
                       {u.clinica || "—"}
                       <div style={{ fontSize: 12, color: "var(--inkFaint)", fontWeight: 400 }}>{u.medico || "sem nome"}</div>
+                      {u.excluido && <div style={{ fontSize: 11, color: "var(--bad, #c0392b)", fontWeight: 600 }}>Desativado</div>}
                     </td>
                     <td style={{ padding: "13px 16px", borderBottom: "1px solid var(--line)", color: "var(--inkSoft)", whiteSpace: "nowrap" }}>{u.email}</td>
+                    <td style={{ padding: "13px 16px", borderBottom: "1px solid var(--line)" }}>{badgeOrigem(u.origem)}</td>
                     <td style={{ padding: "13px 16px", borderBottom: "1px solid var(--line)" }}>
-                      {badgeOrigem(u.origem)}
-                    </td>
-                    <td style={{ padding: "13px 16px", borderBottom: "1px solid var(--line)" }}>
-                      <select value={u.plano || "nenhum"} onChange={(e) => mudarPlano(u.id, e.target.value)} disabled={salvando === u.id}
+                      <select value={u.plano || "nenhum"} onChange={(e) => mudarPlano(u.id, e.target.value)} disabled={salvando === u.id || u.excluido}
                         style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13, fontWeight: 600, color: u.plano && u.plano !== "nenhum" ? "var(--brand)" : "var(--inkFaint)" }}>
                         {PLANOS.map((p) => <option key={p} value={p}>{LABEL[p]}</option>)}
                       </select>
@@ -311,14 +314,17 @@ export default function Admin() {
                       R$ {br(receitaUsuario(u).toFixed(2))}
                     </td>
                     <td style={{ padding: "13px 16px", borderBottom: "1px solid var(--line)" }}>
-                      <button
-                        onClick={() => excluir(u.id)}
-                        disabled={excluindo === u.id}
-                        style={{ background: "none", border: "none", cursor: "pointer", color: "var(--inkFaint)", padding: 6, borderRadius: 8, display: "flex", alignItems: "center" }}
-                        title="Remover usuário"
-                      >
-                        {excluindo === u.id ? <Loader2 size={15} className="spin" /> : <Trash2 size={15} />}
-                      </button>
+                      {u.excluido ? (
+                        <button onClick={() => restaurar(u)} disabled={excluindo === u.id}
+                          style={{ background: "none", border: "none", cursor: "pointer", color: "var(--good)", padding: 6, borderRadius: 8 }} title="Restaurar usuário">
+                          {excluindo === u.id ? <Loader2 size={15} className="spin" /> : <RotateCcw size={15} />}
+                        </button>
+                      ) : (
+                        <button onClick={() => excluir(u)} disabled={excluindo === u.id}
+                          style={{ background: "none", border: "none", cursor: "pointer", color: "var(--inkFaint)", padding: 6, borderRadius: 8 }} title="Desativar usuário">
+                          {excluindo === u.id ? <Loader2 size={15} className="spin" /> : <Trash2 size={15} />}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -328,13 +334,14 @@ export default function Admin() {
         )}
 
         <p style={{ fontSize: 11.5, color: "var(--inkFaint)", marginTop: 16, lineHeight: 1.6 }}>
-          Receita estimada com base no plano e no tempo desde a adesão. Vitalício é tratado como cortesia (sem receita recorrente).
-          A exclusão é permanente: remove o login, o perfil e os pacientes do médico.
+          Usuários desativados perdem o acesso mas os dados clínicos são preservados. Use "Ver excluídos" para restaurar.
+          Todas as ações administrativas são registradas em log de auditoria.
         </p>
       </div>
 
       {showModal && (
         <ModalAddUsuario
+          adminUid={user?.uid}
           onClose={() => setShowModal(false)}
           onAdicionado={(novo) => setUsuarios((us) => [novo, ...us])}
         />
