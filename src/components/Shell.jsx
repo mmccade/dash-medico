@@ -1,9 +1,8 @@
 // src/components/Shell.jsx
-// Alteração: adicionado item "Meu perfil" no nav (ícone UserCircle)
-// Avatar clicável na sidebar desktop → navega para "meuperfil"
+// Alteração: item "Sobre a Murev" adicionado ao nav (sutil, no rodapé do menu)
 
 import { useState, useEffect } from "react";
-import { LayoutDashboard, Users, TrendingUp, Settings, Sun, Moon, LogOut, UserCircle } from "lucide-react";
+import { LayoutDashboard, Users, TrendingUp, Settings, Sun, Moon, LogOut, UserCircle, Sparkles } from "lucide-react";
 import { useTema } from "../lib/theme.jsx";
 import { useStore } from "../lib/store.jsx";
 import { useAuth } from "../lib/auth.jsx";
@@ -12,9 +11,8 @@ import Logo from "./Logo.jsx";
 const NAV = [
   { id: "dashboard", label: "Visão geral", Icon: LayoutDashboard },
   { id: "pacientes", label: "Pacientes", Icon: Users, alias: ["ficha", "novociclo", "novopaciente", "importar"] },
-  { id: "evolucao", label: "Evolução", Icon: TrendingUp },
-  { id: "config", label: "Configurações", Icon: Settings },
-  { id: "meuperfil", label: "Meu perfil", Icon: UserCircle },
+  { id: "evolucao",  label: "Evolução", Icon: TrendingUp },
+  { id: "config",    label: "Configurações", Icon: Settings },
 ];
 
 function useIsMobile() {
@@ -35,14 +33,11 @@ export default function Shell({ tela, navegar, onLogout, children }) {
 
   const ativo = (item) => tela === item.id || (item.alias && item.alias.includes(tela));
 
-  // Badge do plano para a sidebar
   const planoAtivo = perfil?.plano && perfil.plano !== "nenhum";
   const labelPlano = { mensal: "Mensal", trimestral: "Trimestral", anual: "Anual", vitalicio: "Vitalício" };
 
   if (isMobile) {
-    // No mobile, "Meu perfil" fica no nav mas sem label (espaço curto)
-    // Mostra só os 4 principais no bottom nav + perfil como ícone
-    const NAV_MOBILE = NAV;
+    // Mobile: nav só com principais. "Sobre" entra como item flutuante no topo direito.
     return (
       <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
         <header style={{
@@ -52,12 +47,22 @@ export default function Shell({ tela, navegar, onLogout, children }) {
         }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <Logo small />
-            <button className="btn btn-ghost sm" onClick={alternar} style={{ padding: 8 }}>
-              {tema === "escuro" ? <Sun size={16} /> : <Moon size={16} />}
-            </button>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button
+                onClick={() => navegar("sobre")}
+                className="btn btn-ghost sm"
+                style={{ padding: 8, color: tela === "sobre" ? "var(--brand)" : "var(--inkFaint)" }}
+                title="Sobre a Murev"
+              >
+                <Sparkles size={16} />
+              </button>
+              <button className="btn btn-ghost sm" onClick={alternar} style={{ padding: 8 }}>
+                {tema === "escuro" ? <Sun size={16} /> : <Moon size={16} />}
+              </button>
+            </div>
           </div>
           <nav style={{ display: "flex", gap: 4 }}>
-            {NAV_MOBILE.map((item) => (
+            {[...NAV, { id: "meuperfil", label: "Meu perfil", Icon: UserCircle }].map((item) => (
               <button key={item.id} onClick={() => navegar(item.id)} style={{
                 flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
                 padding: "8px 4px", borderRadius: 8, fontSize: 10.5, fontWeight: 600,
@@ -85,8 +90,7 @@ export default function Shell({ tela, navegar, onLogout, children }) {
         <div style={{ padding: "0 8px" }}><Logo /></div>
 
         <nav style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          {/* Nav principal sem Meu perfil */}
-          {NAV.filter((i) => i.id !== "meuperfil").map((item) => (
+          {NAV.map((item) => (
             <button key={item.id} onClick={() => navegar(item.id)} style={{
               display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
               borderRadius: 9, fontSize: 14, textAlign: "left", width: "100%",
@@ -97,10 +101,21 @@ export default function Shell({ tela, navegar, onLogout, children }) {
               <item.Icon size={18} /> {item.label}
             </button>
           ))}
+
+          {/* Item "Sobre a Murev" — separado, mais sutil */}
+          <div style={{ height: 1, background: "var(--line)", margin: "10px 4px" }} />
+          <button onClick={() => navegar("sobre")} style={{
+            display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
+            borderRadius: 9, fontSize: 13.5, textAlign: "left", width: "100%",
+            fontWeight: tela === "sobre" ? 600 : 500,
+            color: tela === "sobre" ? "var(--brand)" : "var(--inkFaint)",
+            background: tela === "sobre" ? "var(--brandSoft)" : "transparent",
+          }}>
+            <Sparkles size={16} /> Sobre a Murev
+          </button>
         </nav>
 
         <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
-          {/* Card do usuário — clicável → Meu perfil */}
           <button onClick={() => navegar("meuperfil")} style={{
             padding: 12, background: tela === "meuperfil" ? "var(--brandSoft)" : "var(--surface2)",
             borderRadius: 11, textAlign: "left", width: "100%",
