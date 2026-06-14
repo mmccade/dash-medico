@@ -1,11 +1,14 @@
 // src/screens/NovoPaciente.jsx
-// Alteração: validação via validate.js antes de salvar
+// Alterações:
+//  - Campo peso meta adicionado
+//  - Confirmação ao clicar "Voltar" se houver dados preenchidos
 
 import { useState } from "react";
 import { ArrowLeft } from "lucide-react";
 import { useStore } from "../lib/store.jsx";
 import { useToast } from "../lib/toast.jsx";
 import { validatePaciente, primeiroErro } from "../lib/validate.js";
+import { parseNum } from "../lib/utils.js";
 
 export default function NovoPaciente({ navegar }) {
   const { addPaciente } = useStore();
@@ -13,20 +16,25 @@ export default function NovoPaciente({ navegar }) {
   const [f, setF] = useState({
     nome: "", idade: "", altura: "", sexo: "Feminino",
     inicio: new Date().toISOString().slice(0, 10),
-    objetivo: "", comorbidades: "",
+    objetivo: "", comorbidades: "", pesoMeta: "",
   });
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
   const [salvando, setSalvando] = useState(false);
 
+  const temDados = f.nome.trim() || f.objetivo.trim() || f.comorbidades.trim();
+
+  const voltar = () => {
+    if (temDados && !window.confirm("Descartar os dados preenchidos e voltar?")) return;
+    navegar("pacientes");
+  };
+
   const salvar = async () => {
     const { data, errors } = validatePaciente(f);
-    if (errors.length) {
-      toast(primeiroErro(errors));
-      return;
-    }
+    if (errors.length) { toast(primeiroErro(errors)); return; }
+    const pesoMeta = parseNum(f.pesoMeta) || null;
     setSalvando(true);
     try {
-      const novo = await addPaciente(data);
+      const novo = await addPaciente({ ...data, pesoMeta });
       toast("Paciente cadastrado");
       navegar("ficha", novo.id);
     } catch (e) {
@@ -38,7 +46,7 @@ export default function NovoPaciente({ navegar }) {
 
   return (
     <div style={{ maxWidth: 680, margin: "0 auto", display: "flex", flexDirection: "column", gap: 24 }}>
-      <button onClick={() => navegar("pacientes")} style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--inkFaint)", fontSize: 13 }}>
+      <button onClick={voltar} style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--inkFaint)", fontSize: 13 }}>
         <ArrowLeft size={15} /> Voltar para pacientes
       </button>
       <div><h1 className="page-title">Cadastrar paciente</h1><p className="page-sub">Dados que não mudam ao longo do tratamento.</p></div>
@@ -50,7 +58,7 @@ export default function NovoPaciente({ navegar }) {
             <label>Nome completo *</label>
             <input type="text" maxLength={150} value={f.nome} onChange={(e) => set("nome", e.target.value)} placeholder="Nome do paciente" />
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 14 }}>
             <div className="field">
               <label>Idade</label>
               <input type="number" inputMode="numeric" min={0} max={130} value={f.idade} onChange={(e) => set("idade", e.target.value)} placeholder="42" />
@@ -58,6 +66,10 @@ export default function NovoPaciente({ navegar }) {
             <div className="field">
               <label>Altura (m)</label>
               <input type="number" inputMode="decimal" step="0.01" min={0.5} max={2.5} value={f.altura} onChange={(e) => set("altura", e.target.value)} placeholder="1,64" />
+            </div>
+            <div className="field">
+              <label>Peso meta (kg)</label>
+              <input type="number" inputMode="decimal" min={20} max={400} value={f.pesoMeta} onChange={(e) => set("pesoMeta", e.target.value)} placeholder="70" />
             </div>
           </div>
           <div className="field">
@@ -84,7 +96,7 @@ export default function NovoPaciente({ navegar }) {
       </div>
 
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-        <button className="btn btn-ghost" onClick={() => navegar("pacientes")}>Cancelar</button>
+        <button className="btn btn-ghost" onClick={voltar}>Cancelar</button>
         <button className="btn btn-primary" onClick={salvar} disabled={salvando} style={{ opacity: salvando ? 0.7 : 1 }}>
           {salvando ? "Salvando…" : "Salvar paciente"}
         </button>
