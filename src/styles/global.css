@@ -9,10 +9,13 @@
   --brand: #0d7a82;
   --brandDeep: #0a5d63;
   --brandSoft: #d9eced;
+  --brand-bg: #e6f4f5;   /* ✅ adicionado — usado em badges do Admin */
   --good: #1f9d6b;
   --goodSoft: #d6f0e4;
   --warn: #c2543a;
   --warnSoft: #fdecea;
+  --bad: #c0392b;        /* ✅ adicionado — usado em erros do Admin e validate */
+  --badSoft: #fdecea;
   --gord: #c2543a;
   --visc: #6b4fc4;
   --idade: #b8862f;
@@ -31,10 +34,13 @@
   --brand: #3db8c0;
   --brandDeep: #5fc9d0;
   --brandSoft: #1d3536;
+  --brand-bg: #1a3538;   /* ✅ adicionado — versão escura */
   --good: #3fc88a;
   --goodSoft: #16332a;
   --warn: #e08060;
   --warnSoft: #2e1f1a;
+  --bad: #e57373;        /* ✅ adicionado — versão escura, mais suave */
+  --badSoft: #2e1a1a;
   --gord: #e08060;
   --visc: #9d86e0;
   --idade: #d4a850;
