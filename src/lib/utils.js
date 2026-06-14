@@ -11,15 +11,20 @@ export const primeiroCiclo = (p) => p.ciclos[0];
 export const perdaPeso = (p) =>
   p.ciclos.length > 1 ? +(primeiroCiclo(p).peso - ultimoCiclo(p).peso).toFixed(1) : 0;
 
-const HOJE = new Date("2026-05-08");
+// ✅ CORRIGIDO — era new Date("2026-05-08"), fixo no tempo
 export const mesesTrat = (iso) => {
+  const hoje = new Date();
   const i = new Date(iso);
-  return (HOJE.getFullYear() - i.getFullYear()) * 12 + (HOJE.getMonth() - i.getMonth());
+  return (hoje.getFullYear() - i.getFullYear()) * 12 + (hoje.getMonth() - i.getMonth());
 };
+
+// ✅ CORRIGIDO — era hardcodado para abril de 2026
 export const novoEsteMes = (iso) => {
+  const hoje = new Date();
   const i = new Date(iso);
-  return i.getFullYear() === 2026 && i.getMonth() === 3;
+  return i.getFullYear() === hoje.getFullYear() && i.getMonth() === hoje.getMonth();
 };
+
 export const iniciais = (nome) =>
   nome.split(" ").map((n) => n[0]).slice(0, 2).join("");
 
