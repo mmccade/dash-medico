@@ -1,12 +1,13 @@
 // src/screens/Admin.jsx
-// Alterações em relação à Fase 3:
-//  - Coluna "Origem" com badge Webhook | Admin
-//  - Adicionar usuário via modal (com validação forte + audit log)
-//  - Excluir = soft-delete (marca excluido:true, preserva dados clínicos)
-//  - Audit log automático em toda ação (via db.js)
-//  - Senha exige 8+ chars, 1 maiúscula, 1 número
-//  - Criação de conta via Cloud Function (evita trocar sessão do admin)
-//    → Por ora usa createUserWithEmailAndPassword com secondary app para não deslogar o admin
+// Correção do bug: conta criada no Auth mas não aparecia no painel.
+// Causa: o signOut do app secundário acontecia ANTES do setDoc, e como o setDoc
+//        roda no db principal (autenticado como admin), em race condition o
+//        Firebase descartava o token. Resultado: PERMISSION_DENIED silencioso.
+// Fix:
+//  1. Cria conta no app secundário
+//  2. setDoc no Firestore do secundário (autenticado como o próprio usuário recém-criado = isDono)
+//  3. Só ENTÃO desloga e mata o app secundário
+//  4. Logs claros em caso de erro
 
 import { useState, useEffect } from "react";
 import { Shield, Users, DollarSign, Loader2, LogOut, Sun, Moon, Plus, Trash2, X, Eye, EyeOff, RotateCcw } from "lucide-react";
@@ -16,9 +17,8 @@ import { useTema } from "../lib/theme.jsx";
 import { useAuth } from "../lib/auth.jsx";
 import { br } from "../lib/utils.js";
 import { validateNovoUsuario, primeiroErro } from "../lib/validate.js";
-import { db } from "../services/firebase.js";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
-import { initializeApp, getApps } from "firebase/app";
+import { doc, setDoc, serverTimestamp, getFirestore } from "firebase/firestore";
+import { initializeApp, getApps, deleteApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 
 const PLANOS = ["nenhum", "mensal", "trimestral", "anual", "vitalicio"];
@@ -36,27 +36,49 @@ function receitaUsuario(u) {
   return VALOR_PLANO[u.plano] || 0;
 }
 
-// Cria usuário usando um app Firebase secundário para NÃO deslogar o admin
-async function criarContaSecundaria(email, senha) {
+// ─── Cria conta + perfil em uma única operação atômica ────────
+// Usa app secundário (não desloga o admin) e escreve o doc com o token
+// do próprio usuário recém-criado (isDono passa nas regras).
+async function criarUsuarioCompleto({ email, senha, perfil }) {
   const mainApp = getApps()[0];
   const config = mainApp.options;
-  let secondaryApp;
+  const secondaryAppName = "secondary_" + Date.now();
+  let secondaryApp = null;
+
   try {
-    secondaryApp = initializeApp(config, "secondary_" + Date.now());
+    // 1. Cria app + auth + firestore secundários
+    secondaryApp = initializeApp(config, secondaryAppName);
     const secondaryAuth = getAuth(secondaryApp);
+    const secondaryDb = getFirestore(secondaryApp);
+
+    // 2. Cria a conta no Auth
     const cred = await createUserWithEmailAndPassword(secondaryAuth, email, senha);
     const uid = cred.user.uid;
+    console.log("[criarUsuario] Auth criado:", uid);
+
+    // 3. Escreve o perfil ENQUANTO o secondary ainda está logado como o novo user
+    //    Como isDono(uid) é true para o próprio usuário, a regra permite.
+    await setDoc(doc(secondaryDb, "usuarios", uid), perfil);
+    console.log("[criarUsuario] Firestore criado para:", uid);
+
+    // 4. Agora sim, desloga
     await secondaryAuth.signOut();
+
     return uid;
+  } catch (err) {
+    console.error("[criarUsuario] ERRO:", err.code, err.message, err);
+    throw err;
   } finally {
+    // 5. Sempre limpa o app secundário
     if (secondaryApp) {
-      try { await secondaryApp.delete(); } catch {}
+      try { await deleteApp(secondaryApp); }
+      catch (e) { console.warn("[criarUsuario] erro ao limpar app secundário:", e); }
     }
   }
 }
 
 // ─── Modal de adicionar usuário ───────────────────────────────
-function ModalAddUsuario({ adminUid, onClose, onAdicionado }) {
+function ModalAddUsuario({ onClose, onAdicionado }) {
   const [email, setEmail]     = useState("");
   const [senha, setSenha]     = useState("");
   const [nome, setNome]       = useState("");
@@ -73,9 +95,7 @@ function ModalAddUsuario({ adminUid, onClose, onAdicionado }) {
 
     setSalvando(true);
     try {
-      const uid = await criarContaSecundaria(data.email, senha);
-
-      await setDoc(doc(db, "usuarios", uid), {
+      const perfilDoc = {
         email: data.email,
         nome: data.nome,
         clinica: data.clinica,
@@ -86,23 +106,41 @@ function ModalAddUsuario({ adminUid, onClose, onAdicionado }) {
         criadoEm: serverTimestamp(),
         origem: "admin",
         excluido: false,
+      };
+
+      const uid = await criarUsuarioCompleto({
+        email: data.email,
+        senha,
+        perfil: perfilDoc,
       });
 
-      onAdicionado({ id: uid, email: data.email, nome: data.nome, clinica: data.clinica, medico: data.nome, plano, origem: "admin", planoDesde: new Date(), excluido: false });
+      onAdicionado({
+        id: uid,
+        email: data.email,
+        nome: data.nome,
+        clinica: data.clinica,
+        medico: data.nome,
+        plano,
+        origem: "admin",
+        planoDesde: new Date(),
+        excluido: false,
+      });
       onClose();
     } catch (e) {
       const msgs = {
         "auth/email-already-in-use": "Já existe uma conta com esse email.",
         "auth/invalid-email": "Email inválido.",
         "auth/weak-password": "Senha fraca.",
+        "auth/network-request-failed": "Falha de rede. Verifique sua conexão.",
+        "permission-denied": "Sem permissão no Firestore. Verifique as regras.",
       };
-      setErros([{ campo: "email", err: msgs[e.code] || "Erro ao criar usuário." }]);
+      const msg = msgs[e.code] || `Erro: ${e.message || "tente novamente."}`;
+      setErros([{ campo: "email", err: msg }]);
       setSalvando(false);
     }
   };
 
   const inputStyle = { width: "100%", padding: "10px 14px", borderRadius: 10, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 14, color: "var(--ink)", boxSizing: "border-box" };
-
   const reqs = [
     { ok: senha.length >= 8, label: "Mínimo 8 caracteres" },
     { ok: /[A-Z]/.test(senha), label: "1 letra maiúscula" },
@@ -138,7 +176,6 @@ function ModalAddUsuario({ adminUid, onClose, onAdicionado }) {
                 {verSenha ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
-            {/* Requisitos de senha */}
             <div style={{ display: "flex", flexDirection: "column", gap: 4, marginTop: 8 }}>
               {reqs.map((r) => (
                 <div key={r.label} style={{ fontSize: 12, color: r.ok ? "var(--good)" : "var(--inkFaint)", display: "flex", gap: 6 }}>
@@ -341,7 +378,6 @@ export default function Admin() {
 
       {showModal && (
         <ModalAddUsuario
-          adminUid={user?.uid}
           onClose={() => setShowModal(false)}
           onAdicionado={(novo) => setUsuarios((us) => [novo, ...us])}
         />
