@@ -11,7 +11,7 @@
 
 import { useState, useEffect } from "react";
 import { Shield, Users, DollarSign, Loader2, LogOut, Sun, Moon, Plus, Trash2, X, Eye, EyeOff, RotateCcw } from "lucide-react";
-import { listarTodosUsuarios, definirPlano, excluirUsuario, restaurarUsuario, VALOR_PLANO } from "../services/db.js";
+import { listarTodosUsuarios, definirPlano, excluirUsuario, restaurarUsuario, contarPacientesPorUsuario, VALOR_PLANO } from "../services/db.js";
 import { sair } from "../services/auth.js";
 import { useTema } from "../lib/theme.jsx";
 import { useAuth } from "../lib/auth.jsx";
@@ -155,24 +155,24 @@ function ModalAddUsuario({ onClose, onAdicionado }) {
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--inkFaint)" }}><X size={20} /></button>
         </div>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <form onSubmit={(e) => { e.preventDefault(); salvar(); }} autoComplete="off" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div>
             <label style={{ fontSize: 12, color: "var(--inkFaint)", display: "block", marginBottom: 5 }}>Nome / Médico</label>
-            <input style={inputStyle} maxLength={150} value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Dr. João Silva" />
+            <input style={inputStyle} maxLength={150} value={nome} onChange={(e) => setNome(e.target.value)} placeholder="Dr. João Silva" autoComplete="off" />
           </div>
           <div>
             <label style={{ fontSize: 12, color: "var(--inkFaint)", display: "block", marginBottom: 5 }}>Clínica</label>
-            <input style={inputStyle} maxLength={300} value={clinica} onChange={(e) => setClinica(e.target.value)} placeholder="Clínica Exemplo" />
+            <input style={inputStyle} maxLength={300} value={clinica} onChange={(e) => setClinica(e.target.value)} placeholder="Clínica Exemplo" autoComplete="off" />
           </div>
           <div>
             <label style={{ fontSize: 12, color: "var(--inkFaint)", display: "block", marginBottom: 5 }}>Email *</label>
-            <input style={inputStyle} type="email" maxLength={254} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="medico@email.com" />
+            <input style={inputStyle} type="email" maxLength={254} value={email} onChange={(e) => setEmail(e.target.value)} placeholder="medico@email.com" autoComplete="off" />
           </div>
           <div>
             <label style={{ fontSize: 12, color: "var(--inkFaint)", display: "block", marginBottom: 5 }}>Senha *</label>
             <div style={{ position: "relative" }}>
-              <input style={{ ...inputStyle, paddingRight: 40 }} type={verSenha ? "text" : "password"} maxLength={128} value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="Mínimo 8 caracteres" />
-              <button onClick={() => setVerSenha(!verSenha)} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--inkFaint)" }}>
+              <input style={{ ...inputStyle, paddingRight: 40 }} type={verSenha ? "text" : "password"} maxLength={128} value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="Mínimo 8 caracteres" autoComplete="new-password" />
+              <button type="button" onClick={() => setVerSenha(!verSenha)} style={{ position: "absolute", right: 12, top: "50%", transform: "translateY(-50%)", background: "none", border: "none", cursor: "pointer", color: "var(--inkFaint)" }}>
                 {verSenha ? <EyeOff size={16} /> : <Eye size={16} />}
               </button>
             </div>
@@ -200,12 +200,12 @@ function ModalAddUsuario({ onClose, onAdicionado }) {
           )}
 
           <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
-            <button onClick={onClose} className="btn btn-ghost" style={{ flex: 1, justifyContent: "center" }}>Cancelar</button>
-            <button onClick={salvar} disabled={salvando} className="btn btn-primary" style={{ flex: 1, justifyContent: "center" }}>
+            <button type="button" onClick={onClose} className="btn btn-ghost" style={{ flex: 1, justifyContent: "center" }}>Cancelar</button>
+            <button type="submit" disabled={salvando} className="btn btn-primary" style={{ flex: 1, justifyContent: "center" }}>
               {salvando ? <><Loader2 size={14} className="spin" /> Criando…</> : "Criar usuário"}
             </button>
           </div>
-        </div>
+        </form>
       </div>
     </div>
   );
@@ -216,6 +216,7 @@ export default function Admin() {
   const { tema, alternar } = useTema();
   const { user } = useAuth();
   const [usuarios, setUsuarios]     = useState([]);
+  const [pacientesCount, setPacientesCount] = useState({});  // { uid: {total, ativos} }
   const [carregando, setCarregando] = useState(true);
   const [salvando, setSalvando]     = useState(null);
   const [excluindo, setExcluindo]   = useState(null);
@@ -225,7 +226,12 @@ export default function Admin() {
   const carregar = () => {
     setCarregando(true);
     listarTodosUsuarios(mostrarExcluidos)
-      .then(setUsuarios)
+      .then(async (lista) => {
+        setUsuarios(lista);
+        // Conta pacientes em paralelo
+        const counts = await contarPacientesPorUsuario(lista.map((u) => u.id));
+        setPacientesCount(counts);
+      })
       .catch((e) => console.error(e))
       .finally(() => setCarregando(false));
   };
@@ -325,7 +331,7 @@ export default function Admin() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
               <thead>
                 <tr>
-                  {["Usuário", "Email", "Origem", "Plano", "Receita", ""].map((h) => (
+                  {["Usuário", "Email", "Origem", "Plano", "Pacientes", "Receita", ""].map((h) => (
                     <th key={h} style={{ padding: "13px 16px", textAlign: "left", fontSize: 11.5, fontWeight: 600, color: "var(--inkFaint)", textTransform: "uppercase", letterSpacing: 0.5, borderBottom: "1px solid var(--line)", background: "var(--surface2)", whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
@@ -346,6 +352,20 @@ export default function Admin() {
                         {PLANOS.map((p) => <option key={p} value={p}>{LABEL[p]}</option>)}
                       </select>
                       {salvando === u.id && <Loader2 size={13} className="spin" style={{ marginLeft: 8, verticalAlign: "middle", color: "var(--inkFaint)" }} />}
+                    </td>
+                    <td style={{ padding: "13px 16px", borderBottom: "1px solid var(--line)" }}>
+                      {pacientesCount[u.id] ? (
+                        <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.3 }}>
+                          <span className="tnum" style={{ fontSize: 14, fontWeight: 700, color: "var(--ink)" }}>
+                            {pacientesCount[u.id].total}
+                          </span>
+                          <span className="tnum" style={{ fontSize: 11, color: "var(--inkFaint)" }}>
+                            {pacientesCount[u.id].ativos} ativo{pacientesCount[u.id].ativos !== 1 ? "s" : ""}
+                          </span>
+                        </div>
+                      ) : (
+                        <span style={{ color: "var(--inkFaint)", fontSize: 13 }}>—</span>
+                      )}
                     </td>
                     <td className="tnum" style={{ padding: "13px 16px", borderBottom: "1px solid var(--line)", fontWeight: 600 }}>
                       R$ {br(receitaUsuario(u).toFixed(2))}
