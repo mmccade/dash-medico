@@ -1,94 +1,101 @@
 // src/screens/Config.jsx
+// Alteração: validação via validate.js antes de salvar
+
 import { useState, useRef } from "react";
-import { Upload, X } from "lucide-react";
 import { useStore } from "../lib/store.jsx";
 import { useToast } from "../lib/toast.jsx";
-import { Toggle } from "../components/ui.jsx";
+import { validateConfig, primeiroErro } from "../lib/validate.js";
 
 export default function Config() {
   const { config, salvarConfig } = useStore();
   const toast = useToast();
-  const [f, setF] = useState(config);
   const logoRef = useRef(null);
+  const [f, setF] = useState({ ...config });
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
 
   const onLogo = (file) => {
     if (!file) return;
-    if (!file.type.startsWith("image/")) { toast("Selecione uma imagem (PNG ou JPG)"); return; }
+    if (file.size > 2 * 1024 * 1024) { toast("Logo deve ter até 2 MB"); return; }
+    if (!["image/png", "image/jpeg", "image/jpg", "image/webp"].includes(file.type)) {
+      toast("Use PNG, JPEG ou WebP");
+      return;
+    }
     const reader = new FileReader();
-    reader.onload = (e) => { set("logo", e.target.result); toast("Logo carregada"); };
-    reader.onerror = () => toast("Erro ao ler a imagem");
+    reader.onload = (e) => set("logo", e.target.result);
     reader.readAsDataURL(file);
   };
 
-  const salvar = () => { salvarConfig(f); toast("Configurações salvas"); };
+  const salvar = () => {
+    const { data, errors } = validateConfig(f);
+    if (errors.length) { toast(primeiroErro(errors)); return; }
+    salvarConfig(data);
+    toast("Configurações salvas");
+  };
 
   return (
-    <div style={{ maxWidth: 620, margin: "0 auto", display: "flex", flexDirection: "column", gap: 24 }}>
-      <div><h1 className="page-title">Configurações</h1><p className="page-sub">Como sua clínica aparece na ficha e no PDF entregue ao paciente.</p></div>
+    <div style={{ maxWidth: 680, margin: "0 auto", display: "flex", flexDirection: "column", gap: 24 }}>
+      <div><h1 className="page-title">Configurações</h1><p className="page-sub">Dados que aparecem nos PDFs gerados.</p></div>
 
       <div className="card" style={{ padding: "20px 22px" }}>
         <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Identidade da clínica</h3>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          <div className="field"><label>Nome da clínica</label><input type="text" value={f.clinica} onChange={(e) => set("clinica", e.target.value)} /></div>
-          <div className="field"><label>Nome do médico</label><input type="text" value={f.medico} onChange={(e) => set("medico", e.target.value)} /></div>
-          <div className="field"><label>CRM</label><input type="text" value={f.crm} onChange={(e) => set("crm", e.target.value)} /></div>
           <div className="field">
-            <label>Logo da clínica (opcional)</label>
-            <input ref={logoRef} type="file" accept="image/png,image/jpeg,image/jpg" style={{ display: "none" }} onChange={(e) => onLogo(e.target.files[0])} />
-            {f.logo ? (
-              <div style={{ display: "flex", alignItems: "center", gap: 14, padding: 14, border: "1px solid var(--line)", borderRadius: 11, background: "var(--surface2)" }}>
-                <img src={f.logo} alt="logo" style={{ maxHeight: 48, maxWidth: 120, objectFit: "contain" }} />
-                <button onClick={() => set("logo", null)} className="btn btn-ghost sm" style={{ marginLeft: "auto" }}>
-                  <X size={14} /> Remover
-                </button>
-              </div>
-            ) : (
-              <button onClick={() => logoRef.current?.click()} style={{
-                width: "100%", border: "1.5px dashed var(--line)", borderRadius: 11, padding: 22,
-                background: "var(--surface2)", color: "var(--inkSoft)", fontSize: 13, display: "flex",
-                flexDirection: "column", alignItems: "center", gap: 8,
-              }}>
-                <Upload size={20} color="var(--brand)" />
-                Clique para enviar a logo · PNG ou JPG
-              </button>
-            )}
+            <label>Nome da clínica *</label>
+            <input type="text" maxLength={300} value={f.clinica} onChange={(e) => set("clinica", e.target.value)} placeholder="Clínica Exemplo" />
           </div>
-        </div>
-      </div>
+          <div className="field">
+            <label>Nome do médico</label>
+            <input type="text" maxLength={150} value={f.medico} onChange={(e) => set("medico", e.target.value)} placeholder="Dr. Nome Sobrenome" />
+          </div>
+          <div className="field">
+            <label>CRM</label>
+            <input type="text" maxLength={20} value={f.crm} onChange={(e) => set("crm", e.target.value)} placeholder="CRM/SP 12345" />
+          </div>
 
-      <div className="card" style={{ padding: "20px 22px" }}>
-        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 16 }}>Marca no PDF do paciente</h3>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 16 }}>
-          <div>
-            <div style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 3 }}>Exibir assinatura Murev no rodapé</div>
-            <div style={{ fontSize: 12.5, color: "var(--inkSoft)", lineHeight: 1.5 }}>Marca discreta "feito com Murev" no rodapé. O protagonismo continua sendo da sua clínica.</div>
+          {/* Logo */}
+          <div className="field">
+            <label>Logo da clínica</label>
+            <div style={{ display: "flex", alignItems: "center", gap: 14, marginTop: 4 }}>
+              {f.logo ? (
+                <img src={f.logo} alt="Logo" style={{ height: 52, maxWidth: 140, objectFit: "contain", borderRadius: 8, border: "1px solid var(--line)", cursor: "pointer" }}
+                  onClick={() => logoRef.current?.click()} title="Clique para trocar" />
+              ) : (
+                <div onClick={() => logoRef.current?.click()}
+                  style={{ height: 52, width: 120, border: "1px dashed var(--line)", borderRadius: 8, display: "flex", alignItems: "center", justifyContent: "center", color: "var(--inkFaint)", fontSize: 12, cursor: "pointer" }}>
+                  Clique para adicionar
+                </div>
+              )}
+              <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                <button className="btn btn-ghost sm" onClick={() => logoRef.current?.click()} style={{ fontSize: 12 }}>
+                  {f.logo ? "Trocar logo" : "Adicionar logo"}
+                </button>
+                {f.logo && (
+                  <button className="btn btn-ghost sm" onClick={() => set("logo", null)} style={{ fontSize: 12, color: "var(--bad, #c0392b)" }}>
+                    Remover
+                  </button>
+                )}
+              </div>
+            </div>
+            <input ref={logoRef} type="file" accept="image/png,image/jpeg,image/jpg,image/webp" style={{ display: "none" }} onChange={(e) => onLogo(e.target.files[0])} />
+            <p style={{ fontSize: 12, color: "var(--inkFaint)", marginTop: 6 }}>PNG, JPEG ou WebP · máx. 2 MB</p>
           </div>
-          <Toggle on={f.murevNoPdf} onClick={() => set("murevNoPdf", !f.murevNoPdf)} />
+
+          {/* Branding Murev no PDF */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "14px 16px", background: "var(--surface2)", borderRadius: 10 }}>
+            <div>
+              <div style={{ fontSize: 13.5, fontWeight: 600 }}>Rodapé Murev Acompanha no PDF</div>
+              <div style={{ fontSize: 12, color: "var(--inkFaint)", marginTop: 2 }}>Exibe "Gerado por Murev Acompanha" nos PDFs</div>
+            </div>
+            <div onClick={() => set("murevNoPdf", !f.murevNoPdf)}
+              style={{ width: 42, height: 24, borderRadius: 99, background: f.murevNoPdf ? "var(--brand)" : "var(--line)", cursor: "pointer", position: "relative", transition: "background .2s" }}>
+              <div style={{ width: 18, height: 18, background: "#fff", borderRadius: 99, position: "absolute", top: 3, left: f.murevNoPdf ? 21 : 3, transition: "left .2s" }} />
+            </div>
+          </div>
         </div>
       </div>
 
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
         <button className="btn btn-primary" onClick={salvar}>Salvar configurações</button>
-      </div>
-
-      <div className="card" style={{ padding: "20px 22px" }}>
-        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 14 }}>Prévia do cabeçalho do relatório</h3>
-        <div style={{ border: "1px solid var(--line)", borderRadius: 11, padding: "18px 20px", background: "var(--surface2)" }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
-            <div>
-              <div style={{ fontSize: 17, fontWeight: 700 }}>{f.clinica}</div>
-              <div style={{ fontSize: 12.5, color: "var(--inkSoft)", marginTop: 2 }}>{f.medico} · {f.crm}</div>
-            </div>
-            {f.logo
-              ? <img src={f.logo} alt="logo" style={{ maxHeight: 44, maxWidth: 110, objectFit: "contain" }} />
-              : <div style={{ width: 44, height: 44, borderRadius: 10, background: "var(--surface)", border: "1px solid var(--line)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "var(--inkFaint)" }}>logo</div>}
-          </div>
-          <div style={{ borderTop: "1px solid var(--line)", marginTop: 14, paddingTop: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: 11.5, color: "var(--inkFaint)" }}>Relatório de acompanhamento</span>
-            {f.murevNoPdf && <span style={{ fontSize: 10.5, color: "var(--inkFaint)" }}>feito com <b style={{ color: "var(--brand)" }}>MUREV</b> Acompanha</span>}
-          </div>
-        </div>
       </div>
     </div>
   );
