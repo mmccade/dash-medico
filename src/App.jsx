@@ -1,5 +1,4 @@
-// src/App.jsx
-// Alteração: importa e roteia MeuPerfil
+// src/App.jsx — adiciona rota "sobre"
 
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
@@ -18,6 +17,7 @@ import NovoPaciente from "./screens/NovoPaciente.jsx";
 import Importar from "./screens/Importar.jsx";
 import Config from "./screens/Config.jsx";
 import MeuPerfil from "./screens/MeuPerfil.jsx";
+import Sobre from "./screens/Sobre.jsx";
 import ModalPlanos from "./components/ModalPlanos.jsx";
 
 function TelaCarregando() {
@@ -49,6 +49,7 @@ function AppMedico() {
       {tela === "importar"    && <Importar navegar={navegar} />}
       {tela === "config"      && <Config />}
       {tela === "meuperfil"   && <MeuPerfil />}
+      {tela === "sobre"       && <Sobre />}
     </Shell>
   );
 }
