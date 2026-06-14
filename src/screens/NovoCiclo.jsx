@@ -1,10 +1,6 @@
 // src/screens/NovoCiclo.jsx
-// Corrigido:
-//  - Campos peso, gordura, visceral usam InputDecimal (vírgula como separador, máscara controlada)
-//  - MG: formato X,X máx 99,9 (ex: 2,5 · 5,0 · 10,0)
-//  - UI: apenas inteiros, máx 99
-//  - Data DD/MM/AAAA via input type=date
-//  - Confirmação ao sair se dados preenchidos
+// Máscara de dinheiro: usuário digita só dígitos, vírgula aparece automaticamente.
+// Exemplo peso: digita 1095 → vira 109,5 (não corta nada).
 
 import { useState } from "react";
 import { ArrowLeft } from "lucide-react";
@@ -13,7 +9,6 @@ import { useToast } from "../lib/toast.jsx";
 import { parseNum } from "../lib/utils.js";
 import { validateCiclo, primeiroErro } from "../lib/validate.js";
 
-// AAAA-MM-DD → DD/MM/AAAA
 function isoParaBr(s) {
   if (!s) return "";
   const [a, m, d] = s.split("-");
@@ -21,7 +16,6 @@ function isoParaBr(s) {
   return `${d}/${m}/${a}`;
 }
 
-// AAAA-MM-DD → "Mai/26"
 function labelMes(iso) {
   if (!iso) return "";
   try {
@@ -31,21 +25,24 @@ function labelMes(iso) {
   } catch { return iso; }
 }
 
-// ─── Input decimal com vírgula (peso, gordura etc.) ───────────
-// maxInt: dígitos antes da vírgula | maxDec: dígitos após | maxVal: valor numérico máximo
-function InputDecimal({ value, onChange, placeholder = "0,0", maxInt = 5, maxDec = 1, maxVal = 9999, style = {} }) {
-  const handleChange = (e) => {
-    let v = e.target.value;
-    v = v.replace(/[^0-9,]/g, "");          // só dígitos e vírgula
-    v = v.replace(/,{2,}/g, ",");           // no máximo uma vírgula
-    const partes = v.split(",");
-    if (partes[0].length > maxInt) partes[0] = partes[0].slice(0, maxInt);
-    if (partes[1] !== undefined) partes[1] = partes[1].slice(0, maxDec);
-    v = partes.join(partes.length > 1 ? "," : "");
-    const num = parseFloat(v.replace(",", "."));
-    if (!isNaN(num) && num > maxVal) return;
-    onChange(v);
-  };
+// ─── Máscara decimal estilo dinheiro ──────────────────────────
+// digitos = total de dígitos numéricos
+// decimais = casas após a vírgula
+// Exemplo: digitos=4 decimais=1 → "1095" vira "109,5"; "12" vira "1,2"
+function mascararDecimal(raw, digitos, decimais) {
+  let s = raw.replace(/\D/g, "");
+  if (s === "") return "";
+  if (s.length > digitos) s = s.slice(0, digitos);
+  if (decimais === 0) return s;
+  while (s.length <= decimais) s = "0" + s;
+  const inteiro = s.slice(0, s.length - decimais);
+  const dec = s.slice(s.length - decimais);
+  const inteiroLimpo = inteiro.replace(/^0+/, "") || "0";
+  return `${inteiroLimpo},${dec}`;
+}
+
+function InputDecimal({ value, onChange, placeholder, digitos = 4, decimais = 1 }) {
+  const handleChange = (e) => onChange(mascararDecimal(e.target.value, digitos, decimais));
   return (
     <input
       type="text"
@@ -53,21 +50,16 @@ function InputDecimal({ value, onChange, placeholder = "0,0", maxInt = 5, maxDec
       value={value}
       onChange={handleChange}
       placeholder={placeholder}
-      style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 14, color: "var(--ink)", boxSizing: "border-box", ...style }}
+      style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 14, color: "var(--ink)", boxSizing: "border-box" }}
     />
   );
 }
 
-// ─── Input MG: X,X máx 99,9 ──────────────────────────────────
-function InputMG({ value, onChange }) {
-  return <InputDecimal value={value} onChange={onChange} placeholder="2,5" maxInt={2} maxDec={1} maxVal={99.9} />;
-}
-
-// ─── Input UI: inteiros até 99 ────────────────────────────────
-function InputUI({ value, onChange }) {
+function InputInteiro({ value, onChange, placeholder, max = 999 }) {
   const handleChange = (e) => {
-    let v = e.target.value.replace(/[^0-9]/g, "").slice(0, 2);
-    if (v !== "" && parseInt(v) > 99) v = "99";
+    let v = e.target.value.replace(/\D/g, "");
+    if (v === "") { onChange(""); return; }
+    if (parseInt(v) > max) v = String(max);
     onChange(v);
   };
   return (
@@ -76,7 +68,7 @@ function InputUI({ value, onChange }) {
       inputMode="numeric"
       value={value}
       onChange={handleChange}
-      placeholder="20"
+      placeholder={placeholder}
       style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 14, color: "var(--ink)", boxSizing: "border-box" }}
     />
   );
@@ -137,14 +129,13 @@ export default function NovoCiclo({ pacienteId, navegar }) {
       <div><h1 className="page-title">Novo ciclo mensal</h1><p className="page-sub">{p.nome}</p></div>
 
       <Secao titulo="Medições do mês">
-        {/* Data */}
         <div className="field" style={{ marginBottom: 14 }}>
           <label>Data de referência *</label>
           <input
             type="date"
             value={f.data}
             onChange={(e) => set("data", e.target.value)}
-            style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 14 }}
+            style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 14, boxSizing: "border-box" }}
           />
           {f.data && (
             <span style={{ fontSize: 12, color: "var(--inkFaint)", marginTop: 4, display: "block" }}>
@@ -153,20 +144,20 @@ export default function NovoCiclo({ pacienteId, navegar }) {
           )}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 14 }}>
-          {/* Peso — vírgula, máx 400 kg */}
           <div className="field">
             <label>Peso (kg) *</label>
-            <InputDecimal value={f.peso} onChange={(v) => set("peso", v)} placeholder="78,5" maxInt={3} maxDec={1} maxVal={400} />
+            {/* 4 dígitos, 1 decimal → suporta até 999,9 kg. Digita 1095 → 109,5 */}
+            <InputDecimal value={f.peso} onChange={(v) => set("peso", v)} placeholder="109,5" digitos={4} decimais={1} />
           </div>
-          {/* Gordura — vírgula, máx 100% */}
           <div className="field">
             <label>% Gordura</label>
-            <InputDecimal value={f.gordura} onChange={(v) => set("gordura", v)} placeholder="34,0" maxInt={2} maxDec={1} maxVal={100} />
+            {/* 3 dígitos, 1 decimal → até 99,9 */}
+            <InputDecimal value={f.gordura} onChange={(v) => set("gordura", v)} placeholder="34,0" digitos={3} decimais={1} />
           </div>
-          {/* Visceral — inteiro, máx 50 */}
           <div className="field">
             <label>Gordura visceral</label>
-            <InputDecimal value={f.visceral} onChange={(v) => set("visceral", v)} placeholder="9" maxInt={2} maxDec={0} maxVal={50} />
+            {/* inteiro até 50 */}
+            <InputInteiro value={f.visceral} onChange={(v) => set("visceral", v)} placeholder="9" max={50} />
           </div>
         </div>
       </Secao>
@@ -185,16 +176,14 @@ export default function NovoCiclo({ pacienteId, navegar }) {
             <div key={k} className="field">
               <label>{l}</label>
               {isMG
-                ? <InputMG value={f[k]} onChange={(v) => set(k, v)} />
-                : <InputUI value={f[k]} onChange={(v) => set(k, v)} />
+                ? <InputDecimal value={f[k]} onChange={(v) => set(k, v)} placeholder="2,5" digitos={3} decimais={1} />
+                : <InputInteiro value={f[k]} onChange={(v) => set(k, v)} placeholder="20" max={99} />
               }
             </div>
           ))}
         </div>
         <p style={{ fontSize: 12, color: "var(--inkFaint)", marginTop: 10 }}>
-          {isMG
-            ? "MG: ex: 2,5 · 5,0 · 10,0 (máx 99,9)"
-            : "UI: apenas inteiros — ex: 20 · 40 (máx 99)"}
+          {isMG ? "MG: ex 2,5 · 5,0 · 10,0 (máx 99,9)" : "UI: inteiros — ex 20 · 40 (máx 99)"}
         </p>
       </Secao>
 
