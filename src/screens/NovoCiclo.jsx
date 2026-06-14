@@ -1,5 +1,5 @@
 // src/screens/NovoCiclo.jsx
-// Alteração: validação via validate.js antes de salvar
+// Alteração: confirmação ao clicar "Voltar" ou "Cancelar" se peso já foi preenchido
 
 import { useState } from "react";
 import { ArrowLeft } from "lucide-react";
@@ -22,24 +22,21 @@ export default function NovoCiclo({ pacienteId, navegar }) {
   const un = f.unidade.toLowerCase();
   const [salvando, setSalvando] = useState(false);
 
+  const temDados = f.peso || f.mes || f.obs.trim();
+
+  const voltar = () => {
+    if (temDados && !window.confirm("Descartar os dados preenchidos e voltar?")) return;
+    navegar("ficha", p.id);
+  };
+
   const salvar = async () => {
     const rawCiclo = {
-      mes: f.mes,
-      peso: f.peso,
-      gordura: f.gordura,
-      visceral: f.visceral,
-      unidade: f.unidade,
-      doses: [f.d1, f.d2, f.d3, f.d4].map(parseNum),
-      local: f.local,
-      suplementacao: f.suplementacao,
-      colaterais: f.colaterais,
-      obs: f.obs,
+      mes: f.mes, peso: f.peso, gordura: f.gordura, visceral: f.visceral,
+      unidade: f.unidade, doses: [f.d1, f.d2, f.d3, f.d4].map(parseNum),
+      local: f.local, suplementacao: f.suplementacao, colaterais: f.colaterais, obs: f.obs,
     };
     const { data, errors } = validateCiclo(rawCiclo);
-    if (errors.length) {
-      toast(primeiroErro(errors));
-      return;
-    }
+    if (errors.length) { toast(primeiroErro(errors)); return; }
     setSalvando(true);
     try {
       await addCiclo(p.id, data);
@@ -54,7 +51,7 @@ export default function NovoCiclo({ pacienteId, navegar }) {
 
   return (
     <div style={{ maxWidth: 680, margin: "0 auto", display: "flex", flexDirection: "column", gap: 24 }}>
-      <button onClick={() => navegar("ficha", p.id)} style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--inkFaint)", fontSize: 13 }}>
+      <button onClick={voltar} style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--inkFaint)", fontSize: 13 }}>
         <ArrowLeft size={15} /> Voltar para a ficha
       </button>
       <div><h1 className="page-title">Novo ciclo mensal</h1><p className="page-sub">{p.nome}</p></div>
@@ -96,7 +93,7 @@ export default function NovoCiclo({ pacienteId, navegar }) {
       </Secao>
 
       <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-        <button className="btn btn-ghost" onClick={() => navegar("ficha", p.id)}>Cancelar</button>
+        <button className="btn btn-ghost" onClick={voltar}>Cancelar</button>
         <button className="btn btn-primary" onClick={salvar} disabled={salvando} style={{ opacity: salvando ? 0.7 : 1 }}>
           {salvando ? "Salvando…" : "Salvar ciclo"}
         </button>
