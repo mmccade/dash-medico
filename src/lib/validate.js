@@ -97,6 +97,7 @@ export function validateCiclo(raw) {
   const push = (campo, err) => { if (err) errors.push({ campo, err }); };
 
   const mes           = str(raw.mes, 20, true);
+  const dataR         = isoDate(raw.data);   // campo opcional DD/MM/AAAA salvo como AAAA-MM-DD
   const pesoR         = num(raw.peso, { min: 20, max: 400, required: true });
   const gorduraR      = num(raw.gordura, { min: 0, max: 100 });
   const visceralR     = int(raw.visceral, { min: 0, max: 50 });
@@ -107,6 +108,7 @@ export function validateCiclo(raw) {
   const obs           = str(raw.obs, OBS_MAX);
 
   push("mes", mes.error);
+  push("data", dataR.error);
   push("peso", pesoR.error);
   push("gordura", gorduraR.error);
   push("visceral", visceralR.error);
@@ -122,6 +124,7 @@ export function validateCiclo(raw) {
     errors,
     data: {
       mes: mes.value,
+      data: dataR.value || "",
       peso: pesoR.value,
       gordura: gorduraR.value,
       visceral: visceralR.value,
