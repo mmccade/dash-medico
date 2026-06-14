@@ -1,8 +1,12 @@
 // src/components/Shell.jsx
+// Alteração: adicionado item "Meu perfil" no nav (ícone UserCircle)
+// Avatar clicável na sidebar desktop → navega para "meuperfil"
+
 import { useState, useEffect } from "react";
-import { LayoutDashboard, Users, TrendingUp, Settings, Sun, Moon, LogOut } from "lucide-react";
+import { LayoutDashboard, Users, TrendingUp, Settings, Sun, Moon, LogOut, UserCircle } from "lucide-react";
 import { useTema } from "../lib/theme.jsx";
 import { useStore } from "../lib/store.jsx";
+import { useAuth } from "../lib/auth.jsx";
 import Logo from "./Logo.jsx";
 
 const NAV = [
@@ -10,6 +14,7 @@ const NAV = [
   { id: "pacientes", label: "Pacientes", Icon: Users, alias: ["ficha", "novociclo", "novopaciente", "importar"] },
   { id: "evolucao", label: "Evolução", Icon: TrendingUp },
   { id: "config", label: "Configurações", Icon: Settings },
+  { id: "meuperfil", label: "Meu perfil", Icon: UserCircle },
 ];
 
 function useIsMobile() {
@@ -25,11 +30,19 @@ function useIsMobile() {
 export default function Shell({ tela, navegar, onLogout, children }) {
   const { tema, alternar } = useTema();
   const { config } = useStore();
+  const { user, perfil } = useAuth();
   const isMobile = useIsMobile();
 
   const ativo = (item) => tela === item.id || (item.alias && item.alias.includes(tela));
 
+  // Badge do plano para a sidebar
+  const planoAtivo = perfil?.plano && perfil.plano !== "nenhum";
+  const labelPlano = { mensal: "Mensal", trimestral: "Trimestral", anual: "Anual", vitalicio: "Vitalício" };
+
   if (isMobile) {
+    // No mobile, "Meu perfil" fica no nav mas sem label (espaço curto)
+    // Mostra só os 4 principais no bottom nav + perfil como ícone
+    const NAV_MOBILE = NAV;
     return (
       <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
         <header style={{
@@ -44,7 +57,7 @@ export default function Shell({ tela, navegar, onLogout, children }) {
             </button>
           </div>
           <nav style={{ display: "flex", gap: 4 }}>
-            {NAV.map((item) => (
+            {NAV_MOBILE.map((item) => (
               <button key={item.id} onClick={() => navegar(item.id)} style={{
                 flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
                 padding: "8px 4px", borderRadius: 8, fontSize: 10.5, fontWeight: 600,
@@ -70,8 +83,10 @@ export default function Shell({ tela, navegar, onLogout, children }) {
         position: "sticky", top: 0, height: "100vh",
       }}>
         <div style={{ padding: "0 8px" }}><Logo /></div>
+
         <nav style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          {NAV.map((item) => (
+          {/* Nav principal sem Meu perfil */}
+          {NAV.filter((i) => i.id !== "meuperfil").map((item) => (
             <button key={item.id} onClick={() => navegar(item.id)} style={{
               display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
               borderRadius: 9, fontSize: 14, textAlign: "left", width: "100%",
@@ -83,10 +98,37 @@ export default function Shell({ tela, navegar, onLogout, children }) {
             </button>
           ))}
         </nav>
+
         <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 10 }}>
-          <div style={{ padding: 12, background: "var(--surface2)", borderRadius: 11, fontSize: 12, color: "var(--inkSoft)", lineHeight: 1.5 }}>
-            <b style={{ color: "var(--ink)" }}>{config.clinica}</b><br />{config.medico}
-          </div>
+          {/* Card do usuário — clicável → Meu perfil */}
+          <button onClick={() => navegar("meuperfil")} style={{
+            padding: 12, background: tela === "meuperfil" ? "var(--brandSoft)" : "var(--surface2)",
+            borderRadius: 11, textAlign: "left", width: "100%",
+            border: tela === "meuperfil" ? "1px solid var(--brand)" : "1px solid transparent",
+            transition: "all 0.15s",
+          }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: planoAtivo ? 6 : 0 }}>
+              <UserCircle size={18} color={tela === "meuperfil" ? "var(--brand)" : "var(--inkFaint)"} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--ink)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {config.medico || config.clinica || "Meu perfil"}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--inkFaint)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                  {user?.email}
+                </div>
+              </div>
+            </div>
+            {planoAtivo && (
+              <div style={{
+                display: "inline-block", fontSize: 10.5, fontWeight: 700, letterSpacing: 0.3,
+                color: "var(--brand)", background: "var(--brandSoft)",
+                padding: "2px 8px", borderRadius: 99, marginLeft: 27,
+              }}>
+                {labelPlano[perfil.plano] || perfil.plano}
+              </div>
+            )}
+          </button>
+
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <button onClick={onLogout} className="btn btn-ghost sm" style={{ gap: 6 }}>
               <LogOut size={14} /> Sair
@@ -97,7 +139,10 @@ export default function Shell({ tela, navegar, onLogout, children }) {
           </div>
         </div>
       </aside>
-      <main style={{ flex: 1, padding: "32px 40px 64px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>{children}</main>
+
+      <main style={{ flex: 1, padding: "32px 40px 64px", maxWidth: 1120, margin: "0 auto", width: "100%" }}>
+        {children}
+      </main>
     </div>
   );
 }
