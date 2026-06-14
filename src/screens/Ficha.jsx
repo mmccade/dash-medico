@@ -126,48 +126,60 @@ function ModalFiltroPdf({ ciclos, onGerar, onFechar }) {
   );
 }
 
-// ─── InputDecimal reutilizável ────────────────────────────────
-function InputDecimal({ value, onChange, placeholder = "0,0", maxInt = 5, maxDec = 1, maxVal = 9999, style: extraStyle = {} }) {
-  const handleChange = (e) => {
-    let v = e.target.value.replace(/[^0-9,]/g, "").replace(/,{2,}/g, ",");
-    const partes = v.split(",");
-    if (partes[0].length > maxInt) partes[0] = partes[0].slice(0, maxInt);
-    if (partes[1] !== undefined) partes[1] = partes[1].slice(0, maxDec);
-    v = partes.join(partes.length > 1 ? "," : "");
-    const num = parseFloat(v.replace(",", "."));
-    if (!isNaN(num) && num > maxVal) return;
-    onChange(v);
-  };
+// ─── Máscara decimal estilo dinheiro ──────────────────────────
+function mascararDecimal(raw, digitos, decimais) {
+  let s = String(raw ?? "").replace(/\D/g, "");
+  if (s === "") return "";
+  if (s.length > digitos) s = s.slice(0, digitos);
+  if (decimais === 0) return s;
+  while (s.length <= decimais) s = "0" + s;
+  const inteiro = s.slice(0, s.length - decimais);
+  const dec = s.slice(s.length - decimais);
+  const inteiroLimpo = inteiro.replace(/^0+/, "") || "0";
+  return `${inteiroLimpo},${dec}`;
+}
+
+function InputDecimal({ value, onChange, placeholder = "0,0", digitos = 4, decimais = 1, style: extraStyle = {} }) {
+  const handleChange = (e) => onChange(mascararDecimal(e.target.value, digitos, decimais));
   const inp = { padding: "9px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13.5, width: "100%", color: "var(--ink)", boxSizing: "border-box", ...extraStyle };
   return <input type="text" inputMode="decimal" value={value} onChange={handleChange} placeholder={placeholder} style={inp} />;
 }
 
+function InputInteiro({ value, onChange, placeholder, max = 999, style: extraStyle = {} }) {
+  const handleChange = (e) => {
+    let v = String(e.target.value).replace(/\D/g, "");
+    if (v === "") { onChange(""); return; }
+    if (parseInt(v) > max) v = String(max);
+    onChange(v);
+  };
+  const inp = { padding: "9px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13.5, width: "100%", color: "var(--ink)", boxSizing: "border-box", ...extraStyle };
+  return <input type="text" inputMode="numeric" value={value} onChange={handleChange} placeholder={placeholder} style={inp} />;
+}
+
 // ─── Modal de edição de ciclo ─────────────────────────────────
 function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
+  // Converte número do banco → string mascarada para exibir
+  const pesoToMask = (n, dig, dec) => n != null && n !== "" ? mascararDecimal(String(Math.round(n * Math.pow(10, dec))), dig, dec) : "";
+
   const [f, setF] = useState({
     ...ciclo,
     data: ciclo.data || "",
-    // altura opcional — preenchida com a do paciente mas editável
-    altura: alturaBase ? String(alturaBase).replace(".", ",") : "",
-    d1: ciclo.doses?.[0] != null ? String(ciclo.doses[0]).replace(".", ",") : "",
-    d2: ciclo.doses?.[1] != null ? String(ciclo.doses[1]).replace(".", ",") : "",
-    d3: ciclo.doses?.[2] != null ? String(ciclo.doses[2]).replace(".", ",") : "",
-    d4: ciclo.doses?.[3] != null ? String(ciclo.doses[3]).replace(".", ",") : "",
-    // peso e gordura já podem ter vírgula ou ponto
-    peso: String(ciclo.peso ?? "").replace(".", ","),
-    gordura: String(ciclo.gordura ?? "").replace(".", ","),
-    visceral: String(ciclo.visceral ?? ""),
+    altura: alturaBase ? pesoToMask(alturaBase, 3, 2) : "",
+    peso: pesoToMask(ciclo.peso, 4, 1),
+    gordura: pesoToMask(ciclo.gordura, 3, 1),
+    visceral: ciclo.visceral != null ? String(ciclo.visceral) : "",
+    d1: ciclo.unidade === "MG" ? pesoToMask(ciclo.doses?.[0], 3, 1) : String(ciclo.doses?.[0] ?? ""),
+    d2: ciclo.unidade === "MG" ? pesoToMask(ciclo.doses?.[1], 3, 1) : String(ciclo.doses?.[1] ?? ""),
+    d3: ciclo.unidade === "MG" ? pesoToMask(ciclo.doses?.[2], 3, 1) : String(ciclo.doses?.[2] ?? ""),
+    d4: ciclo.unidade === "MG" ? pesoToMask(ciclo.doses?.[3], 3, 1) : String(ciclo.doses?.[3] ?? ""),
   });
   const [salvando, setSalvando] = useState(false);
   const toast = useToast();
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
 
-  // IMC calculado ao vivo
   const pesoNum = parseNum(f.peso);
   const altNum  = parseNum(f.altura);
-  const imcCalc = pesoNum > 0 && altNum > 0
-    ? +(pesoNum / (altNum * altNum)).toFixed(1)
-    : null;
+  const imcCalc = pesoNum > 0 && altNum > 0 ? +(pesoNum / (altNum * altNum)).toFixed(1) : null;
 
   const salvar = async () => {
     const raw = {
@@ -193,7 +205,6 @@ function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
 
-          {/* Linha 1: Mês + Data */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div className="field"><label>Mês *</label><input style={inp} value={f.mes} onChange={(e) => set("mes", e.target.value)} maxLength={20} /></div>
             <div className="field">
@@ -202,18 +213,17 @@ function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
             </div>
           </div>
 
-          {/* Linha 2: Peso + Altura + IMC calculado */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
             <div className="field">
               <label>Peso (kg) *</label>
-              <InputDecimal value={f.peso} onChange={(v) => set("peso", v)} placeholder="78,5" maxInt={3} maxDec={1} maxVal={400} />
+              <InputDecimal value={f.peso} onChange={(v) => set("peso", v)} placeholder="109,5" digitos={4} decimais={1} />
             </div>
             <div className="field">
-              <label>Altura (m) <span style={{ fontSize: 11, color: "var(--inkFaint)" }}>opcional</span></label>
-              <InputDecimal value={f.altura} onChange={(v) => set("altura", v)} placeholder="1,64" maxInt={1} maxDec={2} maxVal={2.5} />
+              <label>Altura (m) <span style={{ fontSize: 11, color: "var(--inkFaint)" }}>opc.</span></label>
+              <InputDecimal value={f.altura} onChange={(v) => set("altura", v)} placeholder="1,64" digitos={3} decimais={2} />
             </div>
             <div>
-              <div style={{ fontSize: 12, color: "var(--inkFaint)", marginBottom: 6 }}>IMC calculado</div>
+              <div style={{ fontSize: 12, color: "var(--inkFaint)", marginBottom: 6 }}>IMC</div>
               <div style={{
                 padding: "9px 12px", borderRadius: 9, background: "var(--surface2)",
                 border: "1px solid var(--line)", fontSize: 16, fontWeight: 700,
@@ -225,19 +235,17 @@ function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
             </div>
           </div>
 
-          {/* Linha 3: Gordura + Visceral */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
             <div className="field">
               <label>% Gordura</label>
-              <InputDecimal value={f.gordura} onChange={(v) => set("gordura", v)} placeholder="34,0" maxInt={2} maxDec={1} maxVal={100} />
+              <InputDecimal value={f.gordura} onChange={(v) => set("gordura", v)} placeholder="34,0" digitos={3} decimais={1} />
             </div>
             <div className="field">
               <label>Gordura visceral</label>
-              <InputDecimal value={String(f.visceral)} onChange={(v) => set("visceral", v)} placeholder="9" maxInt={2} maxDec={0} maxVal={50} />
+              <InputInteiro value={f.visceral} onChange={(v) => set("visceral", v)} placeholder="9" max={50} />
             </div>
           </div>
 
-          {/* Doses */}
           <div>
             <label style={{ fontSize: 12, color: "var(--inkFaint)", display: "block", marginBottom: 8 }}>Doses semanais ({f.unidade || "MG"})</label>
             <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 8 }}>
@@ -245,15 +253,14 @@ function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
                 <div key={k}>
                   <div style={{ fontSize: 11, color: "var(--inkFaint)", marginBottom: 4 }}>{l}</div>
                   {isMG
-                    ? <InputDecimal value={f[k]} onChange={(v) => set(k, v)} placeholder="2,5" maxInt={2} maxDec={1} maxVal={99.9} />
-                    : <InputDecimal value={f[k]} onChange={(v) => { const n = v.replace(/[^0-9]/g,"").slice(0,2); set(k, n); }} placeholder="20" maxInt={2} maxDec={0} maxVal={99} />
+                    ? <InputDecimal value={f[k]} onChange={(v) => set(k, v)} placeholder="2,5" digitos={3} decimais={1} />
+                    : <InputInteiro value={f[k]} onChange={(v) => set(k, v)} placeholder="20" max={99} />
                   }
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Local */}
           <div className="field"><label>Local</label>
             <div style={{ display: "inline-flex", background: "var(--surface2)", borderRadius: 10, padding: 3 }}>
               {["Casa","Clínica"].map((o) => (
