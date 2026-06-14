@@ -1,9 +1,5 @@
-// src/App.jsx — FASE 3 + features novas
-// Alterações:
-//  - Importa ModalPlanos
-//  - Se o usuário está logado mas plano === "nenhum" (não veio pelo webhook e não pagou),
-//    renderiza o app com o modal de planos por cima.
-//  - Nenhuma outra lógica foi alterada.
+// src/App.jsx
+// Alteração: importa e roteia MeuPerfil
 
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
@@ -21,6 +17,7 @@ import NovoCiclo from "./screens/NovoCiclo.jsx";
 import NovoPaciente from "./screens/NovoPaciente.jsx";
 import Importar from "./screens/Importar.jsx";
 import Config from "./screens/Config.jsx";
+import MeuPerfil from "./screens/MeuPerfil.jsx";
 import ModalPlanos from "./components/ModalPlanos.jsx";
 
 function TelaCarregando() {
@@ -43,14 +40,15 @@ function AppMedico() {
 
   return (
     <Shell tela={tela} navegar={navegar} onLogout={() => sair()}>
-      {tela === "dashboard" && <Dashboard navegar={navegar} />}
-      {tela === "pacientes" && <Pacientes navegar={navegar} />}
-      {tela === "ficha" && <Ficha pacienteId={pacienteId} navegar={navegar} />}
-      {tela === "evolucao" && <Evolucao />}
-      {tela === "novociclo" && <NovoCiclo pacienteId={pacienteId} navegar={navegar} />}
-      {tela === "novopaciente" && <NovoPaciente navegar={navegar} />}
-      {tela === "importar" && <Importar navegar={navegar} />}
-      {tela === "config" && <Config />}
+      {tela === "dashboard"   && <Dashboard navegar={navegar} />}
+      {tela === "pacientes"   && <Pacientes navegar={navegar} />}
+      {tela === "ficha"       && <Ficha pacienteId={pacienteId} navegar={navegar} />}
+      {tela === "evolucao"    && <Evolucao />}
+      {tela === "novociclo"   && <NovoCiclo pacienteId={pacienteId} navegar={navegar} />}
+      {tela === "novopaciente"&& <NovoPaciente navegar={navegar} />}
+      {tela === "importar"    && <Importar navegar={navegar} />}
+      {tela === "config"      && <Config />}
+      {tela === "meuperfil"   && <MeuPerfil />}
     </Shell>
   );
 }
@@ -58,22 +56,16 @@ function AppMedico() {
 export default function App() {
   const { user, perfil, carregando, isAdmin, firebaseAtivo } = useAuth();
 
-  // Firebase não configurado: roda em modo demo direto (sem login)
-  if (!firebaseAtivo) {
-    return <StoreProvider><AppMedico /></StoreProvider>;
-  }
-
+  if (!firebaseAtivo) return <StoreProvider><AppMedico /></StoreProvider>;
   if (carregando) return <TelaCarregando />;
   if (!user) return <Login />;
   if (isAdmin) return <Admin />;
 
-  // Usuário logado: verifica se tem plano ativo
   const semPlano = !perfil || !perfil.plano || perfil.plano === "nenhum";
 
   return (
     <StoreProvider>
       <AppMedico />
-      {/* Modal de planos sobreposto quando não há plano ativo */}
       {semPlano && <ModalPlanos />}
     </StoreProvider>
   );
