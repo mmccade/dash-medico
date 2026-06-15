@@ -1,33 +1,26 @@
 // src/screens/Ficha.jsx
-// Alterações desta versão:
-//  - Botão PDF abre modal de filtro: Total ou meses selecionados por checkboxes
-//  - Data de referência (DD/MM/AAAA) exibida no header de cada ciclo
-//  - Indicador ▲▼ por ciclo comparando com anterior
-//  - Editar ciclo / excluir ciclo / editar dados do paciente
-//  - Barra de progresso da meta de peso
+// + Toggle ativo/inativo no header com animação
+// + Modal de desativação com motivo
+// + Metas no modal editar paciente (peso, IMC, visceral)
+// + InputData em todos os campos de data
+// + PDF de meta batida disponível quando bater
 
 import { useState } from "react";
-import { ArrowLeft, Stethoscope, FileText, ChevronDown, Pencil, Trash2, X, Loader2, Check, Filter } from "lucide-react";
+import { ArrowLeft, Stethoscope, FileText, ChevronDown, Pencil, Trash2, X, Loader2, Check, Trophy } from "lucide-react";
 import { useStore } from "../lib/store.jsx";
 import { useToast } from "../lib/toast.jsx";
-import { imc, br, fmtData, primeiroCiclo, ultimoCiclo, perdaPeso, mesesTrat, parseNum } from "../lib/utils.js";
-import { Avatar } from "../components/ui.jsx";
+import { imc, br, fmtData, primeiroCiclo, ultimoCiclo, perdaPeso, mesesTrat, parseNum, imcMeta, metaPesoBatida, metaVisceralBatida } from "../lib/utils.js";
+import { Avatar, Toggle } from "../components/ui.jsx";
 import { LinhaChart } from "../components/charts.jsx";
 import { useIsMobile } from "../components/Shell.jsx";
-import { baixarPdfPaciente } from "../services/pdf.js";
+import { baixarPdfPaciente, baixarPdfMetaBatida } from "../services/pdf.js";
 import { validateCiclo, validatePaciente, primeiroErro } from "../lib/validate.js";
-
-// Converte AAAA-MM-DD → DD/MM/AAAA
-function isoParaBr(s) {
-  if (!s) return "";
-  const [a, m, d] = s.split("-");
-  if (!d) return s;
-  return `${d}/${m}/${a}`;
-}
+import { InputDecimal, InputInteiro, InputData, numeroParaMascara } from "../components/inputs.jsx";
+import ModalDesativar from "../components/ModalDesativar.jsx";
 
 // ─── Modal de filtro de PDF ───────────────────────────────────
 function ModalFiltroPdf({ ciclos, onGerar, onFechar }) {
-  const [modo, setModo] = useState("total"); // "total" | "selecionados"
+  const [modo, setModo] = useState("total");
   const [selecionados, setSelecionados] = useState(new Set(ciclos.map((_, i) => i)));
 
   const toggleIdx = (idx) => setSelecionados((prev) => {
@@ -58,7 +51,6 @@ function ModalFiltroPdf({ ciclos, onGerar, onFechar }) {
           <button onClick={onFechar} style={{ color: "var(--inkFaint)" }}><X size={20} /></button>
         </div>
 
-        {/* Modo */}
         <div style={{ display: "flex", background: "var(--surface2)", borderRadius: 10, padding: 3, marginBottom: 20 }}>
           {[["total", "Todos os ciclos"], ["selecionados", "Ciclos selecionados"]].map(([k, l]) => (
             <button key={k} onClick={() => setModo(k)} style={{
@@ -70,7 +62,6 @@ function ModalFiltroPdf({ ciclos, onGerar, onFechar }) {
           ))}
         </div>
 
-        {/* Lista de ciclos para selecionar */}
         {modo === "selecionados" && (
           <div style={{ marginBottom: 20 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
@@ -100,7 +91,7 @@ function ModalFiltroPdf({ ciclos, onGerar, onFechar }) {
                   <div>
                     <div style={{ fontSize: 13.5, fontWeight: 600 }}>{c.mes}</div>
                     <div style={{ fontSize: 12, color: "var(--inkFaint)" }}>
-                      {c.data ? isoParaBr(c.data) : ""} · {br(c.peso)} kg
+                      {c.data ? fmtData(c.data) : ""} · {br(c.peso)} kg
                     </div>
                   </div>
                 </label>
@@ -126,52 +117,19 @@ function ModalFiltroPdf({ ciclos, onGerar, onFechar }) {
   );
 }
 
-// ─── Máscara decimal estilo dinheiro ──────────────────────────
-function mascararDecimal(raw, digitos, decimais) {
-  let s = String(raw ?? "").replace(/\D/g, "");
-  if (s === "") return "";
-  if (s.length > digitos) s = s.slice(0, digitos);
-  if (decimais === 0) return s;
-  while (s.length <= decimais) s = "0" + s;
-  const inteiro = s.slice(0, s.length - decimais);
-  const dec = s.slice(s.length - decimais);
-  const inteiroLimpo = inteiro.replace(/^0+/, "") || "0";
-  return `${inteiroLimpo},${dec}`;
-}
-
-function InputDecimal({ value, onChange, placeholder = "0,0", digitos = 4, decimais = 1, style: extraStyle = {} }) {
-  const handleChange = (e) => onChange(mascararDecimal(e.target.value, digitos, decimais));
-  const inp = { padding: "9px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13.5, width: "100%", color: "var(--ink)", boxSizing: "border-box", ...extraStyle };
-  return <input type="text" inputMode="decimal" value={value} onChange={handleChange} placeholder={placeholder} style={inp} />;
-}
-
-function InputInteiro({ value, onChange, placeholder, max = 999, style: extraStyle = {} }) {
-  const handleChange = (e) => {
-    let v = String(e.target.value).replace(/\D/g, "");
-    if (v === "") { onChange(""); return; }
-    if (parseInt(v) > max) v = String(max);
-    onChange(v);
-  };
-  const inp = { padding: "9px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13.5, width: "100%", color: "var(--ink)", boxSizing: "border-box", ...extraStyle };
-  return <input type="text" inputMode="numeric" value={value} onChange={handleChange} placeholder={placeholder} style={inp} />;
-}
-
-// ─── Modal de edição de ciclo ─────────────────────────────────
+// ─── Modal editar ciclo ──────────────────────────────────────
 function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
-  // Converte número do banco → string mascarada para exibir
-  const pesoToMask = (n, dig, dec) => n != null && n !== "" ? mascararDecimal(String(Math.round(n * Math.pow(10, dec))), dig, dec) : "";
-
   const [f, setF] = useState({
     ...ciclo,
     data: ciclo.data || "",
-    altura: alturaBase ? pesoToMask(alturaBase, 3, 2) : "",
-    peso: pesoToMask(ciclo.peso, 4, 1),
-    gordura: pesoToMask(ciclo.gordura, 3, 1),
+    altura: alturaBase ? numeroParaMascara(alturaBase, 3, 2) : "",
+    peso: numeroParaMascara(ciclo.peso, 4, 1),
+    gordura: numeroParaMascara(ciclo.gordura, 3, 1),
     visceral: ciclo.visceral != null ? String(ciclo.visceral) : "",
-    d1: ciclo.unidade === "MG" ? pesoToMask(ciclo.doses?.[0], 3, 1) : String(ciclo.doses?.[0] ?? ""),
-    d2: ciclo.unidade === "MG" ? pesoToMask(ciclo.doses?.[1], 3, 1) : String(ciclo.doses?.[1] ?? ""),
-    d3: ciclo.unidade === "MG" ? pesoToMask(ciclo.doses?.[2], 3, 1) : String(ciclo.doses?.[2] ?? ""),
-    d4: ciclo.unidade === "MG" ? pesoToMask(ciclo.doses?.[3], 3, 1) : String(ciclo.doses?.[3] ?? ""),
+    d1: ciclo.unidade === "MG" ? numeroParaMascara(ciclo.doses?.[0], 3, 1) : String(ciclo.doses?.[0] ?? ""),
+    d2: ciclo.unidade === "MG" ? numeroParaMascara(ciclo.doses?.[1], 3, 1) : String(ciclo.doses?.[1] ?? ""),
+    d3: ciclo.unidade === "MG" ? numeroParaMascara(ciclo.doses?.[2], 3, 1) : String(ciclo.doses?.[2] ?? ""),
+    d4: ciclo.unidade === "MG" ? numeroParaMascara(ciclo.doses?.[3], 3, 1) : String(ciclo.doses?.[3] ?? ""),
   });
   const [salvando, setSalvando] = useState(false);
   const toast = useToast();
@@ -182,10 +140,7 @@ function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
   const imcCalc = pesoNum > 0 && altNum > 0 ? +(pesoNum / (altNum * altNum)).toFixed(1) : null;
 
   const salvar = async () => {
-    const raw = {
-      ...f,
-      doses: [f.d1, f.d2, f.d3, f.d4].map((d) => parseNum(d)),
-    };
+    const raw = { ...f, doses: [f.d1, f.d2, f.d3, f.d4].map((d) => parseNum(d)) };
     const { data, errors } = validateCiclo(raw);
     if (errors.length) { toast(primeiroErro(errors)); return; }
     setSalvando(true);
@@ -193,7 +148,6 @@ function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
     onFechar();
   };
 
-  const inp = { padding: "9px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13.5, width: "100%", color: "var(--ink)", boxSizing: "border-box" };
   const isMG = (f.unidade || "MG") === "MG";
 
   return (
@@ -206,10 +160,14 @@ function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
 
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div className="field"><label>Mês *</label><input style={inp} value={f.mes} onChange={(e) => set("mes", e.target.value)} maxLength={20} /></div>
             <div className="field">
-              <label>Data de referência</label>
-              <input style={inp} type="date" value={f.data} onChange={(e) => set("data", e.target.value)} />
+              <label>Data</label>
+              <InputData value={f.data} onChange={(v) => set("data", v)} />
+            </div>
+            <div className="field">
+              <label>Mês</label>
+              <input value={f.mes} onChange={(e) => set("mes", e.target.value)} maxLength={20}
+                style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 14, boxSizing: "border-box" }} />
             </div>
           </div>
 
@@ -269,9 +227,9 @@ function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
             </div>
           </div>
 
-          <div className="field"><label>Suplementação</label><input style={inp} value={f.suplementacao || ""} onChange={(e) => set("suplementacao", e.target.value)} maxLength={500} /></div>
-          <div className="field"><label>Colaterais</label><textarea style={{ ...inp, minHeight: 72, resize: "vertical" }} value={f.colaterais || ""} onChange={(e) => set("colaterais", e.target.value)} maxLength={1000} /></div>
-          <div className="field"><label>Observações</label><textarea style={{ ...inp, minHeight: 72, resize: "vertical" }} value={f.obs || ""} onChange={(e) => set("obs", e.target.value)} maxLength={2000} /></div>
+          <Campo label="Suplementação" v={f.suplementacao} on={(v) => set("suplementacao", v)} max={500} />
+          <CampoTextarea label="Colaterais" v={f.colaterais} on={(v) => set("colaterais", v)} max={1000} />
+          <CampoTextarea label="Observações" v={f.obs} on={(v) => set("obs", v)} max={2000} />
 
           <div style={{ display: "flex", gap: 10 }}>
             <button onClick={onFechar} className="btn btn-ghost" style={{ flex: 1, justifyContent: "center" }}>Cancelar</button>
@@ -285,37 +243,62 @@ function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
   );
 }
 
-// ─── Modal de edição do paciente ──────────────────────────────
+// ─── Modal editar paciente — com metas + IMC meta ─────────────
 function ModalEditarPaciente({ p, onSalvar, onFechar }) {
-  const [f, setF] = useState({ nome: p.nome, idade: p.idade, altura: p.altura, sexo: p.sexo, inicio: p.inicio, objetivo: p.objetivo, comorbidades: p.comorbidades, pesoMeta: p.pesoMeta || "" });
+  const [f, setF] = useState({
+    nome: p.nome,
+    idade: p.idade != null ? String(p.idade) : "",
+    altura: p.altura ? numeroParaMascara(p.altura, 3, 2) : "",
+    sexo: p.sexo,
+    inicio: p.inicio,
+    objetivo: p.objetivo,
+    comorbidades: p.comorbidades,
+    pesoMeta: p.pesoMeta ? numeroParaMascara(p.pesoMeta, 4, 1) : "",
+    visceralMeta: p.visceralMeta != null ? String(p.visceralMeta) : "",
+  });
   const [salvando, setSalvando] = useState(false);
   const toast = useToast();
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
+
+  const pesoMetaNum = parseNum(f.pesoMeta);
+  const altNum = parseNum(f.altura);
+  const imcMetaCalc = pesoMetaNum > 0 && altNum > 0 ? imcMeta(pesoMetaNum, altNum) : null;
 
   const salvar = async () => {
     const { data, errors } = validatePaciente(f);
     if (errors.length) { toast(primeiroErro(errors)); return; }
     const pesoMeta = parseNum(f.pesoMeta) || null;
+    const visceralMeta = parseNum(f.visceralMeta) || null;
     setSalvando(true);
-    await onSalvar({ ...data, pesoMeta });
+    await onSalvar({ ...data, pesoMeta, visceralMeta });
     onFechar();
   };
 
-  const inp = { padding: "9px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13.5, width: "100%", color: "var(--ink)", boxSizing: "border-box" };
+  const inpStyle = { padding: "9px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13.5, width: "100%", color: "var(--ink)", boxSizing: "border-box" };
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
-      <div style={{ background: "var(--surface)", borderRadius: 18, width: "100%", maxWidth: 480, padding: "28px 26px", boxShadow: "0 20px 60px rgba(0,0,0,0.15)", maxHeight: "92vh", overflowY: "auto" }}>
+      <div style={{ background: "var(--surface)", borderRadius: 18, width: "100%", maxWidth: 520, padding: "28px 26px", boxShadow: "0 20px 60px rgba(0,0,0,0.15)", maxHeight: "92vh", overflowY: "auto" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 22 }}>
           <h2 style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>Editar paciente</h2>
           <button onClick={onFechar} style={{ color: "var(--inkFaint)" }}><X size={20} /></button>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
-          <div className="field"><label>Nome *</label><input style={inp} value={f.nome} onChange={(e) => set("nome", e.target.value)} maxLength={150} /></div>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-            <div className="field"><label>Idade</label><input style={inp} type="number" value={f.idade} onChange={(e) => set("idade", e.target.value)} min={0} max={130} /></div>
-            <div className="field"><label>Altura (m)</label><input style={inp} type="number" step="0.01" value={f.altura} onChange={(e) => set("altura", e.target.value)} min={0.5} max={2.5} /></div>
+          <div className="field"><label>Nome *</label>
+            <input style={inpStyle} value={f.nome} onChange={(e) => set("nome", e.target.value)} maxLength={150} />
           </div>
+
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+            <div className="field">
+              <label>Idade</label>
+              <InputInteiro value={f.idade} onChange={(v) => set("idade", v)} placeholder="42" max={130} style={inpStyle} />
+            </div>
+            <div className="field">
+              <label>Altura (m)</label>
+              <InputDecimal value={f.altura} onChange={(v) => set("altura", v)} placeholder="1,64" digitos={3} decimais={2} style={inpStyle} />
+            </div>
+          </div>
+
           <div className="field"><label>Sexo</label>
             <div style={{ display: "inline-flex", background: "var(--surface2)", borderRadius: 10, padding: 3 }}>
               {["Feminino","Masculino"].map((s) => (
@@ -323,10 +306,39 @@ function ModalEditarPaciente({ p, onSalvar, onFechar }) {
               ))}
             </div>
           </div>
-          <div className="field"><label>Início do tratamento</label><input style={inp} type="date" value={f.inicio} onChange={(e) => set("inicio", e.target.value)} /></div>
-          <div className="field"><label>Objetivo</label><input style={inp} value={f.objetivo} onChange={(e) => set("objetivo", e.target.value)} maxLength={300} /></div>
-          <div className="field"><label>Condições relatadas</label><input style={inp} value={f.comorbidades} onChange={(e) => set("comorbidades", e.target.value)} maxLength={300} /></div>
-          <div className="field"><label>Peso meta (kg)</label><input style={inp} type="number" value={f.pesoMeta} onChange={(e) => set("pesoMeta", e.target.value)} placeholder="Ex: 70" min={20} max={400} /></div>
+
+          <div className="field"><label>Início do tratamento</label>
+            <InputData value={f.inicio} onChange={(v) => set("inicio", v)} style={inpStyle} />
+          </div>
+
+          <div className="field"><label>Objetivo</label>
+            <input style={inpStyle} value={f.objetivo} onChange={(e) => set("objetivo", e.target.value)} maxLength={300} />
+          </div>
+          <div className="field"><label>Condições relatadas</label>
+            <input style={inpStyle} value={f.comorbidades} onChange={(e) => set("comorbidades", e.target.value)} maxLength={300} />
+          </div>
+
+          {/* Metas */}
+          <div style={{ background: "var(--surface2)", borderRadius: 10, padding: "14px 14px 10px", marginTop: 4 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--inkSoft)", marginBottom: 10, textTransform: "uppercase", letterSpacing: 0.4 }}>Metas</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, alignItems: "flex-end" }}>
+              <div className="field">
+                <label>Peso meta (kg)</label>
+                <InputDecimal value={f.pesoMeta} onChange={(v) => set("pesoMeta", v)} placeholder="70,0" digitos={4} decimais={1} style={inpStyle} />
+              </div>
+              <div>
+                <div style={{ fontSize: 12, color: "var(--inkFaint)", marginBottom: 6 }}>IMC meta</div>
+                <div style={{ padding: "9px 12px", borderRadius: 9, background: "var(--surface)", border: "1px solid var(--line)", fontSize: 14, fontWeight: 700, color: imcMetaCalc ? "var(--brand)" : "var(--inkFaint)", minHeight: 38, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                  {imcMetaCalc ? String(imcMetaCalc).replace(".", ",") : "—"}
+                </div>
+              </div>
+              <div className="field">
+                <label>Visceral meta</label>
+                <InputInteiro value={f.visceralMeta} onChange={(v) => set("visceralMeta", v)} placeholder="9" max={50} style={inpStyle} />
+              </div>
+            </div>
+          </div>
+
           <div style={{ display: "flex", gap: 10 }}>
             <button onClick={onFechar} className="btn btn-ghost" style={{ flex: 1, justifyContent: "center" }}>Cancelar</button>
             <button onClick={salvar} disabled={salvando} className="btn btn-primary" style={{ flex: 1, justifyContent: "center" }}>
@@ -339,7 +351,25 @@ function ModalEditarPaciente({ p, onSalvar, onFechar }) {
   );
 }
 
-// ─── Delta ▲▼ ─────────────────────────────────────────────────
+function Campo({ label, v, on, max }) {
+  return (
+    <div className="field">
+      <label>{label}</label>
+      <input value={v || ""} onChange={(e) => on(e.target.value)} maxLength={max}
+        style={{ padding: "9px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13.5, width: "100%", boxSizing: "border-box" }} />
+    </div>
+  );
+}
+function CampoTextarea({ label, v, on, max }) {
+  return (
+    <div className="field">
+      <label>{label}</label>
+      <textarea value={v || ""} onChange={(e) => on(e.target.value)} maxLength={max} rows={3}
+        style={{ padding: "9px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13.5, width: "100%", boxSizing: "border-box", minHeight: 72, resize: "vertical", fontFamily: "inherit" }} />
+    </div>
+  );
+}
+
 function Delta({ atual, anterior, bom = "baixo", unit = "" }) {
   if (anterior == null || atual == null) return null;
   const diff = +(atual - anterior).toFixed(1);
@@ -354,7 +384,7 @@ function Delta({ atual, anterior, bom = "baixo", unit = "" }) {
 
 // ─── Tela principal ───────────────────────────────────────────
 export default function Ficha({ pacienteId, navegar }) {
-  const { getPaciente, config, editarCiclo, excluirCiclo, editarPaciente } = useStore();
+  const { getPaciente, config, editarCiclo, excluirCiclo, editarPaciente, toggleAtivo, desativarPaciente } = useStore();
   const toast = useToast();
   const isMobile = useIsMobile();
   const p = getPaciente(pacienteId);
@@ -363,16 +393,15 @@ export default function Ficha({ pacienteId, navegar }) {
   const [editandoPaciente, setEditandoPaciente] = useState(false);
   const [excluindoIdx, setExcluindoIdx] = useState(null);
   const [modalPdf, setModalPdf] = useState(false);
+  const [modalDesativar, setModalDesativar] = useState(false);
+  const [animarSaindo, setAnimarSaindo] = useState(false);
 
   if (!p) { navegar("pacientes"); return null; }
 
   const gerarPdf = async (indices) => {
     toast("Gerando PDF…");
     try {
-      // Se indices = null → todos os ciclos; senão → filtra
-      const pacParaPdf = indices
-        ? { ...p, ciclos: indices.map((i) => p.ciclos[i]) }
-        : p;
+      const pacParaPdf = indices ? { ...p, ciclos: indices.map((i) => p.ciclos[i]) } : p;
       await baixarPdfPaciente(pacParaPdf, config);
       toast("PDF gerado");
     } catch (e) { console.error(e); toast("Erro ao gerar PDF"); }
@@ -387,6 +416,34 @@ export default function Ficha({ pacienteId, navegar }) {
     setExcluindoIdx(null);
   };
 
+  const handleToggleAtivo = () => {
+    if (p.ativo) {
+      setModalDesativar(true);
+    } else {
+      setAnimarSaindo(true);
+      setTimeout(async () => {
+        await toggleAtivo(p.id);
+        setAnimarSaindo(false);
+        toast("Paciente reativado");
+      }, 250);
+    }
+  };
+
+  const confirmarDesativacao = async (motivo, detalhes) => {
+    setAnimarSaindo(true);
+    await new Promise((r) => setTimeout(r, 250));
+    await desativarPaciente(p.id, motivo, detalhes);
+    toast("Paciente desativado");
+    setAnimarSaindo(false);
+  };
+
+  const baixarPdfMeta = async (paciente, mensagem) => {
+    try {
+      await baixarPdfMetaBatida(paciente, config, mensagem);
+      toast("PDF de meta gerado");
+    } catch (e) { console.error(e); toast("Erro ao gerar PDF"); }
+  };
+
   const meta = p.pesoMeta;
   const u = p.ciclos.length ? ultimoCiclo(p) : null;
   const f0 = p.ciclos.length ? primeiroCiclo(p) : null;
@@ -395,8 +452,16 @@ export default function Ficha({ pacienteId, navegar }) {
     progresso = Math.min(100, Math.round(((f0.peso - u.peso) / (f0.peso - meta)) * 100));
   }
 
+  const pesoBatido = metaPesoBatida(p);
+  const visceralBatido = metaVisceralBatida(p);
+  const algumaMetaBatida = pesoBatido || visceralBatido;
+
   const Header = (
     <>
+      <style>{`
+        @keyframes ficha-sai { 0% { opacity:1; transform: scale(1); } 100% { opacity:0; transform: scale(0.97); } }
+        .ficha-saindo { animation: ficha-sai 0.25s ease-out forwards; }
+      `}</style>
       <button onClick={() => navegar("pacientes")} style={{ display: "flex", alignItems: "center", gap: 6, color: "var(--inkFaint)", fontSize: 13, marginBottom: 18 }}>
         <ArrowLeft size={15} /> Voltar para pacientes
       </button>
@@ -404,20 +469,37 @@ export default function Ficha({ pacienteId, navegar }) {
         <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
           <Avatar nome={p.nome} lg />
           <div>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
               <h1 style={{ fontSize: isMobile ? 22 : 28, fontWeight: 600, letterSpacing: -0.3, marginBottom: 5, wordBreak: "break-word" }}>{p.nome}</h1>
               <button onClick={() => setEditandoPaciente(true)} title="Editar" style={{ color: "var(--inkFaint)", padding: 4, borderRadius: 7, marginTop: -4 }}>
                 <Pencil size={15} />
               </button>
+              {!p.ativo && (
+                <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: 0.5, padding: "3px 9px", borderRadius: 99, background: "var(--surface2)", color: "var(--inkFaint)" }}>
+                  INATIVO
+                </span>
+              )}
             </div>
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 13, color: "var(--inkSoft)" }}>
               <span>{p.idade} anos</span><span>·</span><span>{p.sexo}</span><span>·</span>
-              <span>{br(p.altura.toFixed(2))} m</span><span>·</span><span>Início {fmtData(p.inicio)}</span>
+              <span>{br(Number(p.altura).toFixed(2))} m</span><span>·</span><span>Início {fmtData(p.inicio)}</span>
               {meta && <><span>·</span><span style={{ color: "var(--brand)", fontWeight: 600 }}>Meta: {br(meta)} kg</span></>}
             </div>
           </div>
         </div>
-        <div style={{ display: "flex", gap: 10, width: isMobile ? "100%" : "auto" }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center", width: isMobile ? "100%" : "auto", flexWrap: "wrap" }}>
+          {/* Toggle ativo/inativo */}
+          <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: "var(--surface2)", borderRadius: 10 }}>
+            <span style={{ fontSize: 12, color: p.ativo ? "var(--good)" : "var(--inkFaint)", fontWeight: 600 }}>
+              {p.ativo ? "Ativo" : "Inativo"}
+            </span>
+            <Toggle on={p.ativo} onClick={handleToggleAtivo} />
+          </div>
+          {algumaMetaBatida && (
+            <button className="btn btn-ghost" style={{ background: "var(--brandSoft)", color: "var(--good)", fontWeight: 700 }} onClick={() => baixarPdfMeta(p, "Parabéns pela conquista! É uma honra ter participado dessa jornada com você.")}>
+              <Trophy size={15} /> Baixar PDF de meta batida
+            </button>
+          )}
           <button className="btn btn-ghost" style={{ flex: isMobile ? 1 : "none" }} onClick={() => navegar("novociclo", p.id)}>
             <Stethoscope size={16} /> Novo ciclo
           </button>
@@ -426,6 +508,21 @@ export default function Ficha({ pacienteId, navegar }) {
           </button>
         </div>
       </div>
+
+      {/* Notificação de meta batida */}
+      {algumaMetaBatida && (
+        <div style={{ marginBottom: 16, padding: "14px 18px", background: "linear-gradient(90deg, var(--brandSoft), transparent)", borderLeft: "4px solid var(--good)", borderRadius: 12, display: "flex", alignItems: "center", gap: 12 }}>
+          <Trophy size={22} color="var(--good)" />
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--good)" }}>
+              {pesoBatido && visceralBatido ? "Metas batidas!" : pesoBatido ? "Meta de peso batida!" : "Meta de gordura visceral batida!"}
+            </div>
+            <div style={{ fontSize: 12.5, color: "var(--inkSoft)" }}>
+              Considere gerar o PDF de parabenização e celebrar com o paciente.
+            </div>
+          </div>
+        </div>
+      )}
 
       {meta && progresso !== null && (
         <div style={{ marginBottom: 16, padding: "14px 18px", background: "var(--surface2)", borderRadius: 12 }}>
@@ -448,7 +545,7 @@ export default function Ficha({ pacienteId, navegar }) {
 
   if (!p.ciclos.length) {
     return (
-      <div>
+      <div className={animarSaindo ? "ficha-saindo" : ""}>
         {Header}
         <div className="card" style={{ padding: "48px 24px", textAlign: "center" }}>
           <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>Nenhum ciclo registrado ainda</div>
@@ -458,6 +555,9 @@ export default function Ficha({ pacienteId, navegar }) {
           </button>
         </div>
         {editandoPaciente && <ModalEditarPaciente p={p} onSalvar={(d) => editarPaciente(p.id, d)} onFechar={() => setEditandoPaciente(false)} />}
+        {modalDesativar && (
+          <ModalDesativar paciente={p} onConfirmar={confirmarDesativacao} onFechar={() => setModalDesativar(false)} navegar={navegar} onBaixarPdfMeta={baixarPdfMeta} />
+        )}
       </div>
     );
   }
@@ -476,7 +576,7 @@ export default function Ficha({ pacienteId, navegar }) {
   );
 
   return (
-    <div>
+    <div className={animarSaindo ? "ficha-saindo" : ""}>
       {Header}
 
       <div className="card" style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fit, minmax(140px, 1fr))", gap: isMobile ? 18 : 24, padding: "22px 24px", marginBottom: 28 }}>
@@ -506,7 +606,7 @@ export default function Ficha({ pacienteId, navegar }) {
                 <span style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap", flex: 1 }}>
                   <span style={{ display: "flex", flexDirection: "column", minWidth: 80 }}>
                     <span style={{ fontSize: 15.5, fontWeight: 600 }}>{c.mes}</span>
-                    {c.data && <span style={{ fontSize: 11, color: "var(--inkFaint)" }}>{isoParaBr(c.data)}</span>}
+                    {c.data && <span style={{ fontSize: 11, color: "var(--inkFaint)" }}>{fmtData(c.data)}</span>}
                   </span>
                   <span style={{ fontSize: 13, color: "var(--inkSoft)" }}>
                     {br(c.peso)} kg
@@ -567,6 +667,9 @@ export default function Ficha({ pacienteId, navegar }) {
       )}
       {modalPdf && (
         <ModalFiltroPdf ciclos={p.ciclos} onGerar={gerarPdf} onFechar={() => setModalPdf(false)} />
+      )}
+      {modalDesativar && (
+        <ModalDesativar paciente={p} onConfirmar={confirmarDesativacao} onFechar={() => setModalDesativar(false)} navegar={navegar} onBaixarPdfMeta={baixarPdfMeta} />
       )}
     </div>
   );
