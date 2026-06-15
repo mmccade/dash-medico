@@ -1,24 +1,26 @@
 // src/lib/utils.js
+
 export const imc = (peso, altura) => +(peso / (altura * altura)).toFixed(1);
 export const br = (n) => (n == null ? "" : n.toString().replace(".", ","));
+
 export const fmtData = (iso) => {
   if (!iso) return "";
   const [y, m, d] = iso.split("-");
   return `${d}/${m}/${y}`;
 };
+
 export const ultimoCiclo = (p) => p.ciclos[p.ciclos.length - 1];
 export const primeiroCiclo = (p) => p.ciclos[0];
+
 export const perdaPeso = (p) =>
   p.ciclos.length > 1 ? +(primeiroCiclo(p).peso - ultimoCiclo(p).peso).toFixed(1) : 0;
 
-// ✅ CORRIGIDO — era new Date("2026-05-08"), fixo no tempo
 export const mesesTrat = (iso) => {
   const hoje = new Date();
   const i = new Date(iso);
   return (hoje.getFullYear() - i.getFullYear()) * 12 + (hoje.getMonth() - i.getMonth());
 };
 
-// ✅ CORRIGIDO — era hardcodado para abril de 2026
 export const novoEsteMes = (iso) => {
   const hoje = new Date();
   const i = new Date(iso);
@@ -28,13 +30,46 @@ export const novoEsteMes = (iso) => {
 export const iniciais = (nome) =>
   nome.split(" ").map((n) => n[0]).slice(0, 2).join("");
 
-// parse seguro de número que pode vir com vírgula
 export const parseNum = (v) => {
   if (typeof v === "number") return v;
   return +(String(v ?? "").replace(",", ".")) || 0;
 };
 
-// cores para gráficos (HEX, canvas-safe), cientes do tema
+// ─── Helpers de meta ─────────────────────────────────────────
+// Calcula o IMC meta a partir do peso meta e altura
+export const imcMeta = (pesoMeta, altura) => {
+  if (!pesoMeta || !altura) return null;
+  return +(pesoMeta / (altura * altura)).toFixed(1);
+};
+
+// Verifica se o paciente bateu a meta de peso
+export const metaPesoBatida = (p) => {
+  if (!p.pesoMeta || !p.ciclos.length) return false;
+  const u = ultimoCiclo(p);
+  return u.peso <= p.pesoMeta;
+};
+
+// Verifica se bateu a meta de gordura visceral
+export const metaVisceralBatida = (p) => {
+  if (!p.visceralMeta || !p.ciclos.length) return false;
+  const u = ultimoCiclo(p);
+  return u.visceral != null && u.visceral <= p.visceralMeta;
+};
+
+// Idade em anos (do paciente)
+export const idade = (p) => p.idade || 0;
+
+// Faixa etária (string "30-39", "40-49"…)
+export const faixaEtaria = (i) => {
+  if (i < 30) return "<30";
+  if (i < 40) return "30-39";
+  if (i < 50) return "40-49";
+  if (i < 60) return "50-59";
+  if (i < 70) return "60-69";
+  return "70+";
+};
+
+// cores para gráficos
 export function chartColors(tema) {
   if (tema === "escuro") {
     return {
