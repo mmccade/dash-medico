@@ -1,24 +1,19 @@
 // src/screens/Alertas.jsx
-// Sistema de alertas inteligentes para retenção de pacientes.
-// Regras (calculadas client-side a partir da lista de pacientes):
-//
-//   1. "Sem novo ciclo há 45+ dias" (paciente marcado como ativo)
-//   2. "Estagnação de peso 60+ dias" (perdeu <0.5kg comparando últimos 2 ciclos com 60+ dias entre eles)
-//   3. "Sem ciclo nenhum" (paciente cadastrado mas nunca recebeu ciclo, ativo há mais de 14 dias)
-//
-// Os alertas SÓ olham pacientes ATIVOS. Inativos não geram alerta.
+// + useTotalAlertas considera dismissed (badge some quando você ignora)
+// + dispatch event "alertas_changed" pro Shell recalcular o badge na hora
+// + Nova regra: paciente bateu meta mas ainda está ativo → sugere desativar com PDF
 
-import { useState, useMemo } from "react";
-import { AlertTriangle, Clock, TrendingDown, UserX, Check, ArrowRight } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { AlertTriangle, Clock, TrendingDown, UserX, Check, ArrowRight, Trophy } from "lucide-react";
 import { useStore } from "../lib/store.jsx";
 import { useToast } from "../lib/toast.jsx";
-import { perdaPeso, ultimoCiclo, primeiroCiclo, br } from "../lib/utils.js";
+import { ultimoCiclo, br, metaPesoBatida, metaVisceralBatida } from "../lib/utils.js";
 import { Avatar } from "../components/ui.jsx";
 
-const DIAS_SEM_CICLO     = 45;  // alerta após X dias sem ciclo novo
-const DIAS_ESTAGNACAO    = 60;  // janela mínima pra considerar estagnação
-const PERDA_MIN_KG       = 0.5; // se perdeu menos que isso na janela, é estagnação
-const DIAS_PRIMEIRO_CICLO = 14; // após X dias do cadastro sem ciclo, alerta
+const DIAS_SEM_CICLO     = 45;
+const DIAS_ESTAGNACAO    = 60;
+const PERDA_MIN_KG       = 0.5;
+const DIAS_PRIMEIRO_CICLO = 14;
 
 const HOJE = () => new Date();
 
@@ -30,7 +25,6 @@ function diasDesde(data) {
   } catch { return null; }
 }
 
-// Pega a data mais recente entre criação do paciente e último ciclo dele
 function ultimaAtividade(p) {
   const c = ultimoCiclo(p);
   if (c?.data) return new Date(c.data);
@@ -39,17 +33,35 @@ function ultimaAtividade(p) {
   return null;
 }
 
-// Calcula todos os alertas a partir da lista de pacientes
+function lerDismissed() {
+  try { return new Set(JSON.parse(localStorage.getItem("alertas_dismissed") || "[]")); }
+  catch { return new Set(); }
+}
+
 export function calcularAlertas(pacientes) {
   const alertas = [];
 
   pacientes.forEach((p) => {
-    if (!p.ativo) return; // só pacientes ativos
+    if (!p.ativo) return;
+
+    // ✅ NOVA REGRA: meta batida + ainda ativo
+    const pesoBatido = metaPesoBatida(p);
+    const visceralBatido = metaVisceralBatida(p);
+    if (pesoBatido || visceralBatido) {
+      alertas.push({
+        id: `meta-${p.id}`,
+        tipo: "meta_batida",
+        paciente: p,
+        dias: 0,
+        severidade: "media",
+        titulo: `🏆 ${p.nome} bateu ${pesoBatido && visceralBatido ? "as metas" : pesoBatido ? "a meta de peso" : "a meta de gordura visceral"}`,
+        descricao: `Considere desativar o paciente com o PDF de parabenização. Você pode reativar a qualquer momento.`,
+      });
+    }
 
     const ultData = ultimaAtividade(p);
     const dias = ultData ? Math.floor((HOJE() - ultData) / (1000 * 60 * 60 * 24)) : null;
 
-    // Regra 3: sem ciclo nenhum
     if (p.ciclos.length === 0) {
       const dCad = diasDesde(p.inicio || p.criadoEm);
       if (dCad != null && dCad >= DIAS_PRIMEIRO_CICLO) {
@@ -66,7 +78,6 @@ export function calcularAlertas(pacientes) {
       return;
     }
 
-    // Regra 1: sem ciclo há 45+ dias
     if (dias != null && dias >= DIAS_SEM_CICLO) {
       alertas.push({
         id: `inativo-${p.id}`,
@@ -79,10 +90,8 @@ export function calcularAlertas(pacientes) {
       });
     }
 
-    // Regra 2: estagnação de peso (precisa de pelo menos 2 ciclos com gap de DIAS_ESTAGNACAO dias)
     if (p.ciclos.length >= 2) {
       const ult = ultimoCiclo(p);
-      // procura um ciclo anterior com diferença >= DIAS_ESTAGNACAO dias
       const ultDataC = ult.data ? new Date(ult.data) : null;
       if (ultDataC) {
         for (let i = p.ciclos.length - 2; i >= 0; i--) {
@@ -119,13 +128,23 @@ export function calcularAlertas(pacientes) {
   });
 }
 
-// Hook utilitário pra outras telas (Shell usa pra mostrar badge no nav)
+// Hook usado pelo Shell pra mostrar o badge — escuta evento "alertas_changed"
 export function useTotalAlertas() {
   const { pacientes } = useStore();
-  return useMemo(() => calcularAlertas(pacientes).length, [pacientes]);
+  const [trigger, setTrigger] = useState(0);
+
+  useEffect(() => {
+    const handler = () => setTrigger((t) => t + 1);
+    window.addEventListener("alertas_changed", handler);
+    return () => window.removeEventListener("alertas_changed", handler);
+  }, []);
+
+  return useMemo(() => {
+    const dismissed = lerDismissed();
+    return calcularAlertas(pacientes).filter((a) => !dismissed.has(a.id)).length;
+  }, [pacientes, trigger]);
 }
 
-// ─── Tela principal ───────────────────────────────────────────
 const COR = {
   alta:  { bg: "var(--warnSoft)",  border: "var(--warn)",  ink: "var(--warn)" },
   media: { bg: "var(--surface2)",  border: "var(--line)",  ink: "var(--inkSoft)" },
@@ -135,30 +154,34 @@ const ICONE = {
   sem_ciclo: UserX,
   sem_ciclo_recente: Clock,
   estagnacao: TrendingDown,
+  meta_batida: Trophy,
 };
 
 export default function Alertas({ navegar }) {
   const { pacientes } = useStore();
   const toast = useToast();
-  const [dismissed, setDismissed] = useState(() => {
-    try { return new Set(JSON.parse(localStorage.getItem("alertas_dismissed") || "[]")); }
-    catch { return new Set(); }
-  });
+  const [dismissed, setDismissed] = useState(lerDismissed);
 
   const alertasRaw = useMemo(() => calcularAlertas(pacientes), [pacientes]);
   const alertas = alertasRaw.filter((a) => !dismissed.has(a.id));
+
+  const dispararEvento = () => {
+    try { window.dispatchEvent(new Event("alertas_changed")); } catch {}
+  };
 
   const ignorar = (id) => {
     const next = new Set(dismissed);
     next.add(id);
     setDismissed(next);
     try { localStorage.setItem("alertas_dismissed", JSON.stringify([...next])); } catch {}
+    dispararEvento();
     toast("Alerta dispensado");
   };
 
   const restaurarTodos = () => {
     setDismissed(new Set());
     localStorage.removeItem("alertas_dismissed");
+    dispararEvento();
     toast("Alertas restaurados");
   };
 
@@ -181,25 +204,19 @@ export default function Alertas({ navegar }) {
         )}
       </div>
 
-      {/* Resumo */}
       {alertas.length > 0 && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
           <div className="card" style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 4 }}>
             <span style={{ fontSize: 12, color: "var(--inkFaint)" }}>Prioridade alta</span>
-            <span className="tnum" style={{ fontSize: 24, fontWeight: 700, color: "var(--warn)" }}>
-              {porSeveridade.alta}
-            </span>
+            <span className="tnum" style={{ fontSize: 24, fontWeight: 700, color: "var(--warn)" }}>{porSeveridade.alta}</span>
           </div>
           <div className="card" style={{ padding: "16px 18px", display: "flex", flexDirection: "column", gap: 4 }}>
             <span style={{ fontSize: 12, color: "var(--inkFaint)" }}>Atenção média</span>
-            <span className="tnum" style={{ fontSize: 24, fontWeight: 700, color: "var(--inkSoft)" }}>
-              {porSeveridade.media}
-            </span>
+            <span className="tnum" style={{ fontSize: 24, fontWeight: 700, color: "var(--inkSoft)" }}>{porSeveridade.media}</span>
           </div>
         </div>
       )}
 
-      {/* Lista */}
       {alertas.length === 0 ? (
         <div className="card" style={{ padding: "60px 30px", textAlign: "center" }}>
           <div style={{ display: "inline-flex", padding: 14, borderRadius: 99, background: "var(--goodSoft, #d6f0e4)", marginBottom: 16 }}>
@@ -223,8 +240,8 @@ export default function Alertas({ navegar }) {
             return (
               <div key={a.id} className="card" style={{
                 padding: "16px 18px",
-                borderLeft: `4px solid ${cor.border}`,
-                background: a.severidade === "alta" ? cor.bg : "var(--surface)",
+                borderLeft: `4px solid ${a.tipo === "meta_batida" ? "var(--good)" : cor.border}`,
+                background: a.tipo === "meta_batida" ? "var(--brandSoft)" : a.severidade === "alta" ? cor.bg : "var(--surface)",
               }}>
                 <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
                   <div style={{ flexShrink: 0 }}>
@@ -232,21 +249,20 @@ export default function Alertas({ navegar }) {
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6, flexWrap: "wrap" }}>
-                      <Icon size={15} color={cor.ink} />
+                      <Icon size={15} color={a.tipo === "meta_batida" ? "var(--good)" : cor.ink} />
                       <span style={{ fontSize: 14.5, fontWeight: 700 }}>{a.titulo}</span>
                     </div>
-                    <p style={{ fontSize: 13, color: "var(--inkSoft)", lineHeight: 1.55, marginBottom: 12 }}>
-                      {a.descricao}
-                    </p>
+                    <p style={{ fontSize: 13, color: "var(--inkSoft)", lineHeight: 1.55, marginBottom: 12 }}>{a.descricao}</p>
                     <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
                       <button className="btn btn-primary sm" onClick={() => navegar("ficha", a.paciente.id)}>
                         Abrir ficha <ArrowRight size={13} />
                       </button>
-                      <button className="btn btn-ghost sm" onClick={() => navegar("novociclo", a.paciente.id)}>
-                        Registrar ciclo
-                      </button>
-                      <button className="btn btn-ghost sm" onClick={() => ignorar(a.id)}
-                        style={{ color: "var(--inkFaint)", marginLeft: "auto" }}>
+                      {a.tipo !== "meta_batida" && (
+                        <button className="btn btn-ghost sm" onClick={() => navegar("novociclo", a.paciente.id)}>
+                          Registrar ciclo
+                        </button>
+                      )}
+                      <button className="btn btn-ghost sm" onClick={() => ignorar(a.id)} style={{ color: "var(--inkFaint)", marginLeft: "auto" }}>
                         Dispensar
                       </button>
                     </div>
