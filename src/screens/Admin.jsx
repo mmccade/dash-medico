@@ -361,6 +361,9 @@ export default function Admin() {
                           </span>
                           <span className="tnum" style={{ fontSize: 11, color: "var(--inkFaint)" }}>
                             {pacientesCount[u.id].ativos} ativo{pacientesCount[u.id].ativos !== 1 ? "s" : ""}
+                            {pacientesCount[u.id].total - pacientesCount[u.id].ativos > 0 && (
+                              <> · {pacientesCount[u.id].total - pacientesCount[u.id].ativos} inativo{(pacientesCount[u.id].total - pacientesCount[u.id].ativos) !== 1 ? "s" : ""}</>
+                            )}
                           </span>
                         </div>
                       ) : (
