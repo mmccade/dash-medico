@@ -1,4 +1,4 @@
-// src/App.jsx — adiciona rota "sobre"
+// src/App.jsx
 
 import { useState } from "react";
 import { Loader2 } from "lucide-react";
@@ -19,6 +19,7 @@ import Config from "./screens/Config.jsx";
 import MeuPerfil from "./screens/MeuPerfil.jsx";
 import Sobre from "./screens/Sobre.jsx";
 import Alertas from "./screens/Alertas.jsx";
+import Relatorio from "./screens/Relatorio.jsx";
 import ModalPlanos from "./components/ModalPlanos.jsx";
 
 function TelaCarregando() {
@@ -41,17 +42,18 @@ function AppMedico() {
 
   return (
     <Shell tela={tela} navegar={navegar} onLogout={() => sair()}>
-      {tela === "dashboard"   && <Dashboard navegar={navegar} />}
-      {tela === "pacientes"   && <Pacientes navegar={navegar} />}
-      {tela === "ficha"       && <Ficha pacienteId={pacienteId} navegar={navegar} />}
-      {tela === "evolucao"    && <Evolucao />}
-      {tela === "novociclo"   && <NovoCiclo pacienteId={pacienteId} navegar={navegar} />}
-      {tela === "novopaciente"&& <NovoPaciente navegar={navegar} />}
-      {tela === "importar"    && <Importar navegar={navegar} />}
-      {tela === "config"      && <Config />}
-      {tela === "meuperfil"   && <MeuPerfil />}
-      {tela === "sobre"       && <Sobre />}
-      {tela === "alertas"     && <Alertas navegar={navegar} />}
+      {tela === "dashboard"    && <Dashboard navegar={navegar} />}
+      {tela === "pacientes"    && <Pacientes navegar={navegar} />}
+      {tela === "ficha"        && <Ficha pacienteId={pacienteId} navegar={navegar} />}
+      {tela === "evolucao"     && <Evolucao pacienteIdInicial={pacienteId} />}
+      {tela === "novociclo"    && <NovoCiclo pacienteId={pacienteId} navegar={navegar} />}
+      {tela === "novopaciente" && <NovoPaciente navegar={navegar} />}
+      {tela === "importar"     && <Importar navegar={navegar} />}
+      {tela === "config"       && <Config />}
+      {tela === "meuperfil"    && <MeuPerfil />}
+      {tela === "sobre"        && <Sobre />}
+      {tela === "alertas"      && <Alertas navegar={navegar} />}
+      {tela === "relatorio"    && <Relatorio />}
     </Shell>
   );
 }
