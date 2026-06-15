@@ -1,6 +1,4 @@
 // src/screens/NovoCiclo.jsx
-// Máscara de dinheiro: usuário digita só dígitos, vírgula aparece automaticamente.
-// Exemplo peso: digita 1095 → vira 109,5 (não corta nada).
 
 import { useState } from "react";
 import { ArrowLeft } from "lucide-react";
@@ -8,13 +6,7 @@ import { useStore } from "../lib/store.jsx";
 import { useToast } from "../lib/toast.jsx";
 import { parseNum } from "../lib/utils.js";
 import { validateCiclo, primeiroErro } from "../lib/validate.js";
-
-function isoParaBr(s) {
-  if (!s) return "";
-  const [a, m, d] = s.split("-");
-  if (!d) return s;
-  return `${d}/${m}/${a}`;
-}
+import { InputDecimal, InputInteiro, InputData } from "../components/inputs.jsx";
 
 function labelMes(iso) {
   if (!iso) return "";
@@ -23,55 +15,6 @@ function labelMes(iso) {
     const meses = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"];
     return `${meses[d.getMonth()]}/${String(d.getFullYear()).slice(2)}`;
   } catch { return iso; }
-}
-
-// ─── Máscara decimal estilo dinheiro ──────────────────────────
-// digitos = total de dígitos numéricos
-// decimais = casas após a vírgula
-// Exemplo: digitos=4 decimais=1 → "1095" vira "109,5"; "12" vira "1,2"
-function mascararDecimal(raw, digitos, decimais) {
-  let s = raw.replace(/\D/g, "");
-  if (s === "") return "";
-  if (s.length > digitos) s = s.slice(0, digitos);
-  if (decimais === 0) return s;
-  while (s.length <= decimais) s = "0" + s;
-  const inteiro = s.slice(0, s.length - decimais);
-  const dec = s.slice(s.length - decimais);
-  const inteiroLimpo = inteiro.replace(/^0+/, "") || "0";
-  return `${inteiroLimpo},${dec}`;
-}
-
-function InputDecimal({ value, onChange, placeholder, digitos = 4, decimais = 1 }) {
-  const handleChange = (e) => onChange(mascararDecimal(e.target.value, digitos, decimais));
-  return (
-    <input
-      type="text"
-      inputMode="decimal"
-      value={value}
-      onChange={handleChange}
-      placeholder={placeholder}
-      style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 14, color: "var(--ink)", boxSizing: "border-box" }}
-    />
-  );
-}
-
-function InputInteiro({ value, onChange, placeholder, max = 999 }) {
-  const handleChange = (e) => {
-    let v = e.target.value.replace(/\D/g, "");
-    if (v === "") { onChange(""); return; }
-    if (parseInt(v) > max) v = String(max);
-    onChange(v);
-  };
-  return (
-    <input
-      type="text"
-      inputMode="numeric"
-      value={value}
-      onChange={handleChange}
-      placeholder={placeholder}
-      style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 14, color: "var(--ink)", boxSizing: "border-box" }}
-    />
-  );
 }
 
 export default function NovoCiclo({ pacienteId, navegar }) {
@@ -99,7 +42,8 @@ export default function NovoCiclo({ pacienteId, navegar }) {
   };
 
   const salvar = async () => {
-    const mesLabel = labelMes(f.data) || isoParaBr(f.data);
+    if (!f.data) { toast("Informe a data de referência"); return; }
+    const mesLabel = labelMes(f.data);
     const rawCiclo = {
       mes: mesLabel, data: f.data,
       peso: f.peso, gordura: f.gordura, visceral: f.visceral,
@@ -131,32 +75,24 @@ export default function NovoCiclo({ pacienteId, navegar }) {
       <Secao titulo="Medições do mês">
         <div className="field" style={{ marginBottom: 14 }}>
           <label>Data de referência *</label>
-          <input
-            type="date"
-            value={f.data}
-            onChange={(e) => set("data", e.target.value)}
-            style={{ width: "100%", padding: "10px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 14, boxSizing: "border-box" }}
-          />
+          <InputData value={f.data} onChange={(v) => set("data", v)} />
           {f.data && (
             <span style={{ fontSize: 12, color: "var(--inkFaint)", marginTop: 4, display: "block" }}>
-              {isoParaBr(f.data)} · ciclo: {labelMes(f.data)}
+              ciclo: {labelMes(f.data)}
             </span>
           )}
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 14 }}>
           <div className="field">
             <label>Peso (kg) *</label>
-            {/* 4 dígitos, 1 decimal → suporta até 999,9 kg. Digita 1095 → 109,5 */}
             <InputDecimal value={f.peso} onChange={(v) => set("peso", v)} placeholder="109,5" digitos={4} decimais={1} />
           </div>
           <div className="field">
             <label>% Gordura</label>
-            {/* 3 dígitos, 1 decimal → até 99,9 */}
             <InputDecimal value={f.gordura} onChange={(v) => set("gordura", v)} placeholder="34,0" digitos={3} decimais={1} />
           </div>
           <div className="field">
             <label>Gordura visceral</label>
-            {/* inteiro até 50 */}
             <InputInteiro value={f.visceral} onChange={(v) => set("visceral", v)} placeholder="9" max={50} />
           </div>
         </div>
