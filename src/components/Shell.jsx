@@ -1,17 +1,21 @@
 // src/components/Shell.jsx
-// Alteração: item "Sobre a Murev" adicionado ao nav (sutil, no rodapé do menu)
+// Alterações:
+//  - Item "Alertas" no nav com badge vermelho de contagem
+//  - "Sobre a Murev" continua no rodapé
 
 import { useState, useEffect } from "react";
-import { LayoutDashboard, Users, TrendingUp, Settings, Sun, Moon, LogOut, UserCircle, Sparkles } from "lucide-react";
+import { LayoutDashboard, Users, TrendingUp, Settings, Sun, Moon, LogOut, UserCircle, Sparkles, Bell } from "lucide-react";
 import { useTema } from "../lib/theme.jsx";
 import { useStore } from "../lib/store.jsx";
 import { useAuth } from "../lib/auth.jsx";
+import { useTotalAlertas } from "../screens/Alertas.jsx";
 import Logo from "./Logo.jsx";
 
 const NAV = [
   { id: "dashboard", label: "Visão geral", Icon: LayoutDashboard },
   { id: "pacientes", label: "Pacientes", Icon: Users, alias: ["ficha", "novociclo", "novopaciente", "importar"] },
-  { id: "evolucao",  label: "Evolução", Icon: TrendingUp },
+  { id: "alertas",   label: "Alertas",   Icon: Bell, badge: true },
+  { id: "evolucao",  label: "Evolução",  Icon: TrendingUp },
   { id: "config",    label: "Configurações", Icon: Settings },
 ];
 
@@ -25,19 +29,51 @@ function useIsMobile() {
   return m;
 }
 
+// Badge vermelho de contagem
+function BadgeAlertas({ count }) {
+  if (!count || count <= 0) return null;
+  return (
+    <span style={{
+      minWidth: 18, height: 18, padding: "0 5px", borderRadius: 99,
+      background: "var(--warn)", color: "#fff",
+      fontSize: 10.5, fontWeight: 700, letterSpacing: 0.2,
+      display: "inline-flex", alignItems: "center", justifyContent: "center",
+      marginLeft: "auto",
+    }}>
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
+
+// Bolinha vermelha (versão mini, pro mobile)
+function DotAlertas({ count }) {
+  if (!count || count <= 0) return null;
+  return (
+    <span style={{
+      position: "absolute", top: 2, right: 8,
+      minWidth: 14, height: 14, padding: "0 4px", borderRadius: 99,
+      background: "var(--warn)", color: "#fff",
+      fontSize: 9, fontWeight: 700,
+      display: "inline-flex", alignItems: "center", justifyContent: "center",
+      border: "1.5px solid var(--surface)",
+    }}>
+      {count > 9 ? "9+" : count}
+    </span>
+  );
+}
+
 export default function Shell({ tela, navegar, onLogout, children }) {
   const { tema, alternar } = useTema();
   const { config } = useStore();
   const { user, perfil } = useAuth();
   const isMobile = useIsMobile();
+  const totalAlertas = useTotalAlertas();
 
   const ativo = (item) => tela === item.id || (item.alias && item.alias.includes(tela));
-
   const planoAtivo = perfil?.plano && perfil.plano !== "nenhum";
   const labelPlano = { mensal: "Mensal", trimestral: "Trimestral", anual: "Anual", vitalicio: "Vitalício" };
 
   if (isMobile) {
-    // Mobile: nav só com principais. "Sobre" entra como item flutuante no topo direito.
     return (
       <div style={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
         <header style={{
@@ -48,12 +84,9 @@ export default function Shell({ tela, navegar, onLogout, children }) {
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
             <Logo small />
             <div style={{ display: "flex", gap: 6 }}>
-              <button
-                onClick={() => navegar("sobre")}
-                className="btn btn-ghost sm"
+              <button onClick={() => navegar("sobre")} className="btn btn-ghost sm"
                 style={{ padding: 8, color: tela === "sobre" ? "var(--brand)" : "var(--inkFaint)" }}
-                title="Sobre a Murev"
-              >
+                title="Sobre a Murev">
                 <Sparkles size={16} />
               </button>
               <button className="btn btn-ghost sm" onClick={alternar} style={{ padding: 8 }}>
@@ -68,8 +101,10 @@ export default function Shell({ tela, navegar, onLogout, children }) {
                 padding: "8px 4px", borderRadius: 8, fontSize: 10.5, fontWeight: 600,
                 background: ativo(item) ? "var(--brandSoft)" : "var(--surface2)",
                 color: ativo(item) ? "var(--brand)" : "var(--inkSoft)",
+                position: "relative",
               }}>
                 <item.Icon size={16} />
+                {item.id === "alertas" && <DotAlertas count={totalAlertas} />}
                 {item.label.split(" ")[0]}
               </button>
             ))}
@@ -98,11 +133,12 @@ export default function Shell({ tela, navegar, onLogout, children }) {
               color: ativo(item) ? "var(--brand)" : "var(--inkSoft)",
               background: ativo(item) ? "var(--brandSoft)" : "transparent",
             }}>
-              <item.Icon size={18} /> {item.label}
+              <item.Icon size={18} />
+              <span>{item.label}</span>
+              {item.id === "alertas" && <BadgeAlertas count={totalAlertas} />}
             </button>
           ))}
 
-          {/* Item "Sobre a Murev" — separado, mais sutil */}
           <div style={{ height: 1, background: "var(--line)", margin: "10px 4px" }} />
           <button onClick={() => navegar("sobre")} style={{
             display: "flex", alignItems: "center", gap: 10, padding: "10px 14px",
