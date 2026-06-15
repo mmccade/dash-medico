@@ -1,10 +1,8 @@
 // src/components/Shell.jsx
-// Alterações:
-//  - Item "Alertas" no nav com badge vermelho de contagem
-//  - "Sobre a Murev" continua no rodapé
+// + Item "Relatório" no nav
 
 import { useState, useEffect } from "react";
-import { LayoutDashboard, Users, TrendingUp, Settings, Sun, Moon, LogOut, UserCircle, Sparkles, Bell } from "lucide-react";
+import { LayoutDashboard, Users, TrendingUp, Settings, Sun, Moon, LogOut, UserCircle, Sparkles, Bell, BarChart3 } from "lucide-react";
 import { useTema } from "../lib/theme.jsx";
 import { useStore } from "../lib/store.jsx";
 import { useAuth } from "../lib/auth.jsx";
@@ -13,9 +11,10 @@ import Logo from "./Logo.jsx";
 
 const NAV = [
   { id: "dashboard", label: "Visão geral", Icon: LayoutDashboard },
-  { id: "pacientes", label: "Pacientes", Icon: Users, alias: ["ficha", "novociclo", "novopaciente", "importar"] },
-  { id: "alertas",   label: "Alertas",   Icon: Bell, badge: true },
-  { id: "evolucao",  label: "Evolução",  Icon: TrendingUp },
+  { id: "pacientes", label: "Pacientes",   Icon: Users, alias: ["ficha", "novociclo", "novopaciente", "importar"] },
+  { id: "alertas",   label: "Alertas",     Icon: Bell, badge: true },
+  { id: "evolucao",  label: "Evolução",    Icon: TrendingUp },
+  { id: "relatorio", label: "Relatório",   Icon: BarChart3 },
   { id: "config",    label: "Configurações", Icon: Settings },
 ];
 
@@ -29,14 +28,13 @@ function useIsMobile() {
   return m;
 }
 
-// Badge vermelho de contagem
 function BadgeAlertas({ count }) {
   if (!count || count <= 0) return null;
   return (
     <span style={{
       minWidth: 18, height: 18, padding: "0 5px", borderRadius: 99,
       background: "var(--warn)", color: "#fff",
-      fontSize: 10.5, fontWeight: 700, letterSpacing: 0.2,
+      fontSize: 10.5, fontWeight: 700,
       display: "inline-flex", alignItems: "center", justifyContent: "center",
       marginLeft: "auto",
     }}>
@@ -45,7 +43,6 @@ function BadgeAlertas({ count }) {
   );
 }
 
-// Bolinha vermelha (versão mini, pro mobile)
 function DotAlertas({ count }) {
   if (!count || count <= 0) return null;
   return (
@@ -94,10 +91,11 @@ export default function Shell({ tela, navegar, onLogout, children }) {
               </button>
             </div>
           </div>
-          <nav style={{ display: "flex", gap: 4 }}>
+          <nav style={{ display: "flex", gap: 4, overflowX: "auto" }}>
             {[...NAV, { id: "meuperfil", label: "Meu perfil", Icon: UserCircle }].map((item) => (
               <button key={item.id} onClick={() => navegar(item.id)} style={{
-                flex: 1, display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
+                flex: "1 0 auto", minWidth: 60,
+                display: "flex", flexDirection: "column", alignItems: "center", gap: 3,
                 padding: "8px 4px", borderRadius: 8, fontSize: 10.5, fontWeight: 600,
                 background: ativo(item) ? "var(--brandSoft)" : "var(--surface2)",
                 color: ativo(item) ? "var(--brand)" : "var(--inkSoft)",
