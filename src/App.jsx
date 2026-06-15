@@ -18,6 +18,7 @@ import Importar from "./screens/Importar.jsx";
 import Config from "./screens/Config.jsx";
 import MeuPerfil from "./screens/MeuPerfil.jsx";
 import Sobre from "./screens/Sobre.jsx";
+import Alertas from "./screens/Alertas.jsx";
 import ModalPlanos from "./components/ModalPlanos.jsx";
 
 function TelaCarregando() {
@@ -50,6 +51,7 @@ function AppMedico() {
       {tela === "config"      && <Config />}
       {tela === "meuperfil"   && <MeuPerfil />}
       {tela === "sobre"       && <Sobre />}
+      {tela === "alertas"     && <Alertas navegar={navegar} />}
     </Shell>
   );
 }
