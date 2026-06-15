@@ -1,9 +1,5 @@
 // src/lib/store.jsx
-// Alterações:
-//  - editarCiclo(pacienteId, index, dadosNovos) — substitui ciclo por índice
-//  - excluirCiclo(pacienteId, index) — remove ciclo por índice
-//  - editarPaciente(pacienteId, dados) — atualiza campos do paciente
-//  - exportarCSV() — gera e baixa CSV de todos os pacientes
+// + desativarPaciente(id, motivo, detalhes) — desativa com registro de motivo
 
 import { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { PACIENTES_DEMO, CONFIG_INICIAL } from "./dados.js";
@@ -56,7 +52,7 @@ export function StoreProvider({ children }) {
       setPacientes((ps) => [novo, ...ps]);
       return novo;
     }
-    const novo = { ...dados, id: nextId, ciclos: [], ativo: true };
+    const novo = { ...dados, id: nextId, ciclos: dados.ciclos || [], ativo: true };
     setNextId((n) => n + 1);
     setPacientes((ps) => [novo, ...ps]);
     return novo;
@@ -83,7 +79,6 @@ export function StoreProvider({ children }) {
     setPacientes((ps) => ps.map((x) => (x.id === pacienteId ? { ...x, ciclos: novosCiclos } : x)));
   }, [usandoFirebase, user, pacientes]);
 
-  // ✅ NOVO — editar ciclo por índice
   const editarCiclo = useCallback(async (pacienteId, idx, dadosNovos) => {
     const p = pacientes.find((x) => x.id === pacienteId);
     if (!p) return;
@@ -92,7 +87,6 @@ export function StoreProvider({ children }) {
     setPacientes((ps) => ps.map((x) => (x.id === pacienteId ? { ...x, ciclos: novosCiclos } : x)));
   }, [usandoFirebase, user, pacientes]);
 
-  // ✅ NOVO — excluir ciclo por índice
   const excluirCiclo = useCallback(async (pacienteId, idx) => {
     const p = pacientes.find((x) => x.id === pacienteId);
     if (!p) return;
@@ -101,18 +95,52 @@ export function StoreProvider({ children }) {
     setPacientes((ps) => ps.map((x) => (x.id === pacienteId ? { ...x, ciclos: novosCiclos } : x)));
   }, [usandoFirebase, user, pacientes]);
 
-  // ✅ NOVO — editar dados do paciente
   const editarPaciente = useCallback(async (pacienteId, dados) => {
     if (usandoFirebase) await dbApi.atualizarPaciente(user.uid, pacienteId, dados);
     setPacientes((ps) => ps.map((x) => (x.id === pacienteId ? { ...x, ...dados } : x)));
   }, [usandoFirebase, user]);
 
+  // Ativa/desativa simples (sem motivo) — mantido pra retrocompatibilidade
   const toggleAtivo = useCallback(async (pacienteId) => {
     const p = pacientes.find((x) => x.id === pacienteId);
     if (!p) return;
-    if (usandoFirebase) await dbApi.atualizarPaciente(user.uid, pacienteId, { ativo: !p.ativo });
-    setPacientes((ps) => ps.map((x) => (x.id === pacienteId ? { ...x, ativo: !x.ativo } : x)));
+    const novoStatus = !p.ativo;
+    const patch = novoStatus
+      ? { ativo: true, desativadoEm: null, motivoDesativacao: null, detalhesDesativacao: null }
+      : { ativo: false, desativadoEm: new Date().toISOString() };
+    if (usandoFirebase) await dbApi.atualizarPaciente(user.uid, pacienteId, patch);
+    setPacientes((ps) => ps.map((x) => (x.id === pacienteId ? { ...x, ...patch } : x)));
   }, [usandoFirebase, user, pacientes]);
+
+  // ✅ NOVO — desativar com motivo
+  // motivo: "meta_batida" | "sumiu" | "outros" | "nao_informar"
+  const desativarPaciente = useCallback(async (pacienteId, motivo, detalhes = "") => {
+    const patch = {
+      ativo: false,
+      desativadoEm: new Date().toISOString(),
+      motivoDesativacao: motivo,
+      detalhesDesativacao: detalhes || null,
+    };
+    if (usandoFirebase) await dbApi.atualizarPaciente(user.uid, pacienteId, patch);
+    setPacientes((ps) => ps.map((x) => (x.id === pacienteId ? { ...x, ...patch } : x)));
+  }, [usandoFirebase, user]);
+
+  // ✅ NOVO — ações em massa
+  const ativarEmMassa = useCallback(async (ids) => {
+    const patch = { ativo: true, desativadoEm: null, motivoDesativacao: null, detalhesDesativacao: null };
+    if (usandoFirebase) await Promise.all(ids.map((id) => dbApi.atualizarPaciente(user.uid, id, patch)));
+    setPacientes((ps) => ps.map((x) => (ids.includes(x.id) ? { ...x, ...patch } : x)));
+  }, [usandoFirebase, user]);
+
+  const desativarEmMassa = useCallback(async (ids, motivo = "nao_informar") => {
+    const patch = {
+      ativo: false,
+      desativadoEm: new Date().toISOString(),
+      motivoDesativacao: motivo,
+    };
+    if (usandoFirebase) await Promise.all(ids.map((id) => dbApi.atualizarPaciente(user.uid, id, patch)));
+    setPacientes((ps) => ps.map((x) => (ids.includes(x.id) ? { ...x, ...patch } : x)));
+  }, [usandoFirebase, user]);
 
   const salvarConfig = useCallback(async (nova) => {
     setConfig(nova);
@@ -122,7 +150,6 @@ export function StoreProvider({ children }) {
     }
   }, [usandoFirebase, user, setPerfil]);
 
-  // ✅ NOVO — exportar todos os pacientes como CSV
   const exportarCSV = useCallback(() => {
     const linhas = [];
     const cab = ["Nome", "Idade", "Sexo", "Altura(m)", "Inicio", "Objetivo", "Condicoes", "Ativo",
@@ -157,7 +184,8 @@ export function StoreProvider({ children }) {
       pacientes, config, carregando, usandoFirebase,
       getPaciente, addPaciente, addPacientesEmLote, addCiclo,
       editarCiclo, excluirCiclo, editarPaciente,
-      toggleAtivo, salvarConfig, exportarCSV,
+      toggleAtivo, desativarPaciente, ativarEmMassa, desativarEmMassa,
+      salvarConfig, exportarCSV,
     }}>
       {children}
     </StoreCtx.Provider>
