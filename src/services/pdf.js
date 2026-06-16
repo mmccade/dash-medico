@@ -332,3 +332,85 @@ export async function baixarPdfEvolucao(p, config) {
 export async function baixarPdfMetaBatida(p, config, mensagemMedico) {
   await gerar(htmlMetaBatida(p, config, mensagemMedico), `Conquista_${p.nome.replace(/[^a-zA-Z0-9]+/g, "_")}.pdf`);
 }
+
+// ─── PDF de Relatório ────────────────────────────────────────────
+function htmlRelatorio({ dados, labelPeriodo, config, pacientes }) {
+  const metasBatidas = pacientes.filter(p => {
+    if (!p.ciclos || !p.ciclos.length) return false;
+    const u = p.ciclos[p.ciclos.length - 1];
+    return (p.pesoMeta && u.peso <= p.pesoMeta) || (p.visceralMeta && u.visceral != null && u.visceral <= p.visceralMeta);
+  });
+
+  const statCard = (lbl, val, cor) =>
+    `<div style="flex:1;min-width:120px;background:#f0f4f4;border-radius:10px;padding:16px 18px">
+      <div style="font-size:11.5px;color:#5a6663;font-weight:600;margin-bottom:6px">${esc(lbl)}</div>
+      <div style="font-size:26px;font-weight:700;color:${cor || "#27322f"}">${esc(String(val))}</div>
+    </div>`;
+
+  const faixaRow = (label, val, max) =>
+    `<div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+      <span style="font-size:11.5px;color:#5a6663;min-width:45px;font-weight:600">${label}</span>
+      <div style="flex:1;height:7px;background:#e0e8e8;border-radius:99px;overflow:hidden">
+        <div style="width:${Math.round((val/Math.max(1,max))*100)}%;height:100%;background:#0d7a82;border-radius:99px"></div>
+      </div>
+      <span style="font-size:12px;min-width:20px;text-align:right;font-weight:700">${val}</span>
+    </div>`;
+
+  const faixaLabels = ["<30","30-39","40-49","50-59","60-69","70+"];
+  const maxNovos = Math.max(1, ...Object.values(dados.faixasNovos));
+  const maxInativ = Math.max(1, ...Object.values(dados.faixasInativos));
+
+  const metasHtml = metasBatidas.length ? metasBatidas.map(p => {
+    const u = p.ciclos[p.ciclos.length-1];
+    const f0 = p.ciclos[0];
+    const perda = f0 && u ? +(f0.peso - u.peso).toFixed(1) : null;
+    return `<tr>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5eaea;font-weight:600">${esc(p.nome)}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5eaea;text-align:center">${p.pesoMeta ? `${br(p.pesoMeta)} kg` : "—"}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5eaea;text-align:center">${u.peso ? `${br(u.peso)} kg` : "—"}</td>
+      <td style="padding:8px 12px;border-bottom:1px solid #e5eaea;text-align:center;color:#1f9d6b;font-weight:700">${perda != null && perda > 0 ? `−${br(perda)} kg` : "—"}</td>
+    </tr>`;
+  }).join("") : `<tr><td colspan="4" style="padding:12px;color:#8a9693;text-align:center">Nenhuma meta batida no período</td></tr>`;
+
+  return `
+    <div style="font-family:system-ui,-apple-system,sans-serif;color:#27322f;padding:28px 32px;max-width:720px;margin:0 auto">
+      ${cabecalho(config, `Relatório · ${esc(labelPeriodo)}`)}
+
+      <div style="font-size:16px;font-weight:700;color:#0d7a82;margin-bottom:12px">Resumo do período</div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:24px">
+        ${statCard("Novos pacientes", dados.novos, "#1f9d6b")}
+        ${statCard("Desativados", dados.inativos, "#c2543a")}
+        ${statCard("Ciclos no período", dados.ciclos, "#0d7a82")}
+        ${statCard("Peso eliminado total", `${br(dados.pesoTotal.toFixed(1))} kg`, "#0d7a82")}
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:24px">
+        <div>
+          <div style="font-size:13px;font-weight:700;margin-bottom:10px">Faixa etária — novos</div>
+          ${faixaLabels.map(f => faixaRow(f, dados.faixasNovos[f]||0, maxNovos)).join("")}
+        </div>
+        <div>
+          <div style="font-size:13px;font-weight:700;margin-bottom:10px">Faixa etária — inativos</div>
+          ${faixaLabels.map(f => faixaRow(f, dados.faixasInativos[f]||0, maxInativ)).join("")}
+        </div>
+      </div>
+
+      <div style="font-size:16px;font-weight:700;color:#0d7a82;margin-bottom:12px">Metas batidas</div>
+      <table style="width:100%;border-collapse:collapse;font-size:13px;margin-bottom:24px">
+        <thead><tr>
+          <th style="padding:8px 12px;background:#f0f4f4;text-align:left;font-size:11px;color:#5a6663;border-bottom:1px solid #dde5e5">Paciente</th>
+          <th style="padding:8px 12px;background:#f0f4f4;text-align:center;font-size:11px;color:#5a6663;border-bottom:1px solid #dde5e5">Meta</th>
+          <th style="padding:8px 12px;background:#f0f4f4;text-align:center;font-size:11px;color:#5a6663;border-bottom:1px solid #dde5e5">Peso atual</th>
+          <th style="padding:8px 12px;background:#f0f4f4;text-align:center;font-size:11px;color:#5a6663;border-bottom:1px solid #dde5e5">Total eliminado</th>
+        </tr></thead>
+        <tbody>${metasHtml}</tbody>
+      </table>
+
+      ${rodape(config)}
+    </div>`;
+}
+
+export async function gerarPdfRelatorio({ dados, labelPeriodo, config, pacientes }) {
+  const dataStr = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+  await gerar(htmlRelatorio({ dados, labelPeriodo, config, pacientes }), `Relatorio_${dataStr}.pdf`);
+}
