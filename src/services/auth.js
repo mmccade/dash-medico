@@ -9,13 +9,10 @@ import {
   updatePassword,
   reauthenticateWithCredential,
   EmailAuthProvider,
-  sendPasswordResetEmail,
 } from "firebase/auth";
 import { auth } from "./firebase.js";
 
 // Entrar — persistência configurável
-// lembrar = true → sessão persiste após fechar o browser (localStorage)
-// lembrar = false → sessão some ao fechar a aba (sessionStorage)
 export async function entrar(email, senha, lembrar = true) {
   await setPersistence(auth, lembrar ? browserLocalPersistence : browserSessionPersistence);
   return signInWithEmailAndPassword(auth, email, senha);
@@ -38,9 +35,23 @@ export async function redefinirSenha(senhaAtual, senhaNova) {
   await updatePassword(user, senhaNova);
 }
 
-// Enviar email de redefinição (para tela de login — "esqueci minha senha")
-export function enviarEmailRedefinicao(email) {
-  return sendPasswordResetEmail(auth, email);
+// Enviar email de redefinição via API Vercel + Resend
+// O email sai de noreply@murev.com.br em vez do Firebase
+export async function enviarEmailRedefinicao(email) {
+  const res = await fetch("/api/reset-password", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    const err = new Error(body.error || "Falha ao enviar email.");
+    err.code = "api/reset-failed";
+    throw err;
+  }
+
+  return res.json();
 }
 
 export function traduzErroAuth(code) {
@@ -54,6 +65,7 @@ export function traduzErroAuth(code) {
     "auth/too-many-requests": "Muitas tentativas. Tente novamente em instantes.",
     "auth/network-request-failed": "Falha de conexão. Verifique sua internet.",
     "auth/requires-recent-login": "Por segurança, faça login novamente antes de trocar a senha.",
+    "api/reset-failed": "Não foi possível enviar o email. Tente novamente.",
   };
   return mapa[code] || "Não foi possível concluir. Tente novamente.";
 }
