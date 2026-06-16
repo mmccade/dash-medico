@@ -66,7 +66,7 @@ export default function App() {
   if (!user) return <Login />;
   if (isAdmin) return <Admin />;
 
-  const semPlano = !perfil || !perfil.plano || perfil.plano === "nenhum";
+  const semPlano = perfil && (!perfil.plano || perfil.plano === "nenhum");
 
   return (
     <StoreProvider>
