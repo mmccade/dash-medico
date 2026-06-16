@@ -33,11 +33,12 @@ export default function NovoPaciente({ navegar }) {
   // IMC atual ao vivo
   const pesoNum = parseNum(f.pesoAtual);
   const altNum  = parseNum(f.altura);
-  const imcCalc = pesoNum > 0 && altNum > 0 ? +(pesoNum / (altNum * altNum)).toFixed(1) : null;
+  const altMetros = altNum >= 100 ? altNum / 100 : altNum;
+  const imcCalc = pesoNum > 0 && altMetros > 0 ? +(pesoNum / (altMetros * altMetros)).toFixed(1) : null;
 
   // IMC meta ao vivo
   const pesoMetaNum = parseNum(f.pesoMeta);
-  const imcMetaCalc = pesoMetaNum > 0 && altNum > 0 ? imcMeta(pesoMetaNum, altNum) : null;
+  const imcMetaCalc = pesoMetaNum > 0 && altMetros > 0 ? imcMeta(pesoMetaNum, altMetros) : null;
 
   const salvar = async () => {
     if (!f.inicio) { toast("Informe o início do tratamento"); return; }
@@ -106,8 +107,8 @@ export default function NovoPaciente({ navegar }) {
               <InputInteiro value={f.idade} onChange={(v) => set("idade", v)} placeholder="42" max={130} />
             </div>
             <div className="field">
-              <label>Altura (m)</label>
-              <InputDecimal value={f.altura} onChange={(v) => set("altura", v)} placeholder="1,64" digitos={3} decimais={2} />
+              <label>Altura (cm)</label>
+              <InputInteiro value={f.altura} onChange={(v) => set("altura", v)} placeholder="164" max={250} />
             </div>
           </div>
 
