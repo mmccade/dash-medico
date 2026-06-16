@@ -218,6 +218,13 @@ export default function Pacientes({ navegar }) {
         )}
         {lista.length === 0 && <div style={{ padding: "40px 20px", textAlign: "center", color: "var(--inkFaint)", fontSize: 14 }}>Nenhum paciente neste filtro.</div>}
         {lista.map((p) => {
+          const labelMotivo = (m) => ({
+            meta_batida: "Bateu a meta",
+            sumiu: "Sumiu / Não voltou",
+            outros: "Outros motivos",
+            nao_informar: null,
+          })[m] ?? null;
+
           const temCiclo = p.ciclos.length > 0;
           const ev = p.ciclos.length > 1 ? `−${br(perdaPeso(p))} kg` : "—";
           const selecionado = selecionados.has(p.id);
@@ -239,6 +246,11 @@ export default function Pacientes({ navegar }) {
                       {p.idade} anos · {p.sexo}
                       {temCiclo && <> · {br(ultimoCiclo(p).peso)} kg</>}
                     </span>
+                    {!p.ativo && labelMotivo(p.motivoDesativacao) && (
+                      <span style={{ fontSize: 11, color: "var(--warn)", fontWeight: 600, display: "block", marginTop: 1 }}>
+                        Motivo: {labelMotivo(p.motivoDesativacao)}{p.detalhesDesativacao && p.motivoDesativacao !== "meta_batida" && p.motivoDesativacao !== "sumiu" ? ` · ${p.detalhesDesativacao}` : ""}
+                      </span>
+                    )}
                   </span>
                 </button>
                 {!modoSelecao && <Toggle on={p.ativo} onClick={() => handleToggle(p)} />}
@@ -252,6 +264,11 @@ export default function Pacientes({ navegar }) {
                 <span>
                   <span style={{ fontSize: 14, fontWeight: 600, display: "block" }}>{p.nome}</span>
                   <span style={{ fontSize: 12, color: "var(--inkFaint)" }}>{p.idade} anos · {p.sexo}</span>
+                  {!p.ativo && labelMotivo(p.motivoDesativacao) && (
+                    <span style={{ fontSize: 11, color: "var(--warn)", fontWeight: 600, display: "block", marginTop: 1 }}>
+                      Motivo: {labelMotivo(p.motivoDesativacao)}{p.detalhesDesativacao && p.motivoDesativacao !== "meta_batida" && p.motivoDesativacao !== "sumiu" ? ` · ${p.detalhesDesativacao}` : ""}
+                    </span>
+                  )}
                 </span>
               </button>
               <span style={{ fontSize: 13.5, color: "var(--inkSoft)" }}>{mesesTrat(p.inicio)} meses</span>
