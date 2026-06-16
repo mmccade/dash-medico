@@ -238,6 +238,29 @@ function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
 
   const isMG = (f.unidade || "MG") === "MG";
 
+  if (etapa === "sucesso") return <TelaEdicaoSucesso onFechar={onFechar} />;
+
+  if (etapa === "revisar" && dadosValidados) return (
+    <ModalConfirmacaoEdicao
+      titulo={`Revisar edição — ciclo ${ciclo.mes}`}
+      campos={[
+        { label: "Data", valor: dadosValidados.data ? fmtData(dadosValidados.data) : "—" },
+        { label: "Peso", valor: `${br(dadosValidados.peso)} kg` },
+        { label: "% Gordura", valor: dadosValidados.gordura ? `${br(dadosValidados.gordura)}%` : "—" },
+        { label: "Gordura visceral", valor: dadosValidados.visceral || "—" },
+        { label: "Doses (S1-S4)", valor: dadosValidados.doses.map(d => br(d)).join(" · ") + ` ${dadosValidados.unidade?.toLowerCase()}` },
+        { label: "Local", valor: dadosValidados.local },
+        { label: "Suplementação", valor: dadosValidados.suplementacao || "—" },
+        { label: "Colaterais", valor: dadosValidados.colaterais || "—" },
+        { label: "Observações", valor: dadosValidados.obs || "—" },
+      ]}
+      salvando={salvando}
+      onConfirmar={salvar}
+      onEditar={() => setEtapa("form")}
+      onFechar={onFechar}
+    />
+  );
+
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div style={{ background: "var(--surface)", borderRadius: 18, width: "100%", maxWidth: 520, padding: "28px 26px", boxShadow: "0 20px 60px rgba(0,0,0,0.15)", maxHeight: "92vh", overflowY: "auto" }}>
@@ -329,29 +352,6 @@ function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
       </div>
     </div>
   );
-
-  if (etapa === "sucesso") return <TelaEdicaoSucesso onFechar={onFechar} />;
-
-  if (etapa === "revisar" && dadosValidados) return (
-    <ModalConfirmacaoEdicao
-      titulo={`Revisar edição — ciclo ${ciclo.mes}`}
-      campos={[
-        { label: "Data", valor: dadosValidados.data ? fmtData(dadosValidados.data) : "—" },
-        { label: "Peso", valor: `${br(dadosValidados.peso)} kg` },
-        { label: "% Gordura", valor: dadosValidados.gordura ? `${br(dadosValidados.gordura)}%` : "—" },
-        { label: "Gordura visceral", valor: dadosValidados.visceral || "—" },
-        { label: "Doses (S1-S4)", valor: dadosValidados.doses.map(d => br(d)).join(" · ") + ` ${dadosValidados.unidade?.toLowerCase()}` },
-        { label: "Local", valor: dadosValidados.local },
-        { label: "Suplementação", valor: dadosValidados.suplementacao || "—" },
-        { label: "Colaterais", valor: dadosValidados.colaterais || "—" },
-        { label: "Observações", valor: dadosValidados.obs || "—" },
-      ]}
-      salvando={salvando}
-      onConfirmar={salvar}
-      onEditar={() => setEtapa("form")}
-      onFechar={onFechar}
-    />
-  );
 }
 
 // ─── Modal editar paciente — com metas + IMC meta ─────────────
@@ -402,6 +402,29 @@ function ModalEditarPaciente({ p, onSalvar, onFechar }) {
   };
 
   const inpStyle = { padding: "9px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13.5, width: "100%", color: "var(--ink)", boxSizing: "border-box" };
+
+  if (etapa === "sucesso") return <TelaEdicaoSucesso onFechar={onFechar} />;
+
+  if (etapa === "revisar" && dadosValidados) return (
+    <ModalConfirmacaoEdicao
+      titulo="Revisar edição do paciente"
+      campos={[
+        { label: "Nome", valor: dadosValidados.nome },
+        { label: "Idade", valor: dadosValidados.idade ? `${dadosValidados.idade} anos` : "—" },
+        { label: "Altura", valor: dadosValidados.altura ? `${Math.round(dadosValidados.altura * 100)} cm` : "—" },
+        { label: "Sexo", valor: dadosValidados.sexo },
+        { label: "Início", valor: fmtData(dadosValidados.inicio) },
+        { label: "Objetivo", valor: dadosValidados.objetivo },
+        { label: "Condições relatadas", valor: dadosValidados.comorbidades },
+        { label: "Peso meta", valor: dadosValidados.pesoMeta ? `${br(dadosValidados.pesoMeta)} kg` : "—" },
+        { label: "Visceral meta", valor: dadosValidados.visceralMeta ?? "—" },
+      ]}
+      salvando={salvando}
+      onConfirmar={salvar}
+      onEditar={() => setEtapa("form")}
+      onFechar={onFechar}
+    />
+  );
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 200, background: "rgba(0,0,0,0.45)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
@@ -475,29 +498,6 @@ function ModalEditarPaciente({ p, onSalvar, onFechar }) {
         </div>
       </div>
     </div>
-  );
-
-  if (etapa === "sucesso") return <TelaEdicaoSucesso onFechar={onFechar} />;
-
-  if (etapa === "revisar" && dadosValidados) return (
-    <ModalConfirmacaoEdicao
-      titulo="Revisar edição do paciente"
-      campos={[
-        { label: "Nome", valor: dadosValidados.nome },
-        { label: "Idade", valor: dadosValidados.idade ? `${dadosValidados.idade} anos` : "—" },
-        { label: "Altura", valor: dadosValidados.altura ? `${Math.round(dadosValidados.altura * 100)} cm` : "—" },
-        { label: "Sexo", valor: dadosValidados.sexo },
-        { label: "Início", valor: fmtData(dadosValidados.inicio) },
-        { label: "Objetivo", valor: dadosValidados.objetivo },
-        { label: "Condições relatadas", valor: dadosValidados.comorbidades },
-        { label: "Peso meta", valor: dadosValidados.pesoMeta ? `${br(dadosValidados.pesoMeta)} kg` : "—" },
-        { label: "Visceral meta", valor: dadosValidados.visceralMeta ?? "—" },
-      ]}
-      salvando={salvando}
-      onConfirmar={salvar}
-      onEditar={() => setEtapa("form")}
-      onFechar={onFechar}
-    />
   );
 }
 
