@@ -21,11 +21,14 @@ export function AuthProvider({ children }) {
           setPerfil(p);
         } catch (e) {
           console.error("Erro ao carregar perfil:", e);
+          setPerfil(null);
+        } finally {
+          setCarregando(false);
         }
       } else {
         setPerfil(null);
+        setCarregando(false);
       }
-      setCarregando(false);
     });
     return unsub;
   }, []);
