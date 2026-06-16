@@ -225,9 +225,15 @@ function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
   const salvar = async () => {
     if (!dadosValidados) return;
     setSalvando(true);
-    await onSalvar(dadosValidados);
-    setSalvando(false);
-    setEtapa("sucesso");
+    try {
+      await onSalvar(dadosValidados);
+      setEtapa("sucesso");
+    } catch (e) {
+      console.error("Erro ao salvar ciclo", e);
+      toast("Erro ao salvar. Tente novamente.");
+    } finally {
+      setSalvando(false);
+    }
   };
 
   const isMG = (f.unidade || "MG") === "MG";
@@ -384,9 +390,15 @@ function ModalEditarPaciente({ p, onSalvar, onFechar }) {
   const salvar = async () => {
     if (!dadosValidados) return;
     setSalvando(true);
-    await onSalvar(dadosValidados);
-    setSalvando(false);
-    setEtapa("sucesso");
+    try {
+      await onSalvar(dadosValidados);
+      setEtapa("sucesso");
+    } catch (e) {
+      console.error("Erro ao salvar paciente", e);
+      toast("Erro ao salvar. Tente novamente.");
+    } finally {
+      setSalvando(false);
+    }
   };
 
   const inpStyle = { padding: "9px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13.5, width: "100%", color: "var(--ink)", boxSizing: "border-box" };
