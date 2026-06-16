@@ -3,13 +3,19 @@
 
 import { MessageCircle, Pill, Stethoscope, ShieldCheck, ArrowRight } from "lucide-react";
 import { useIsMobile } from "../components/Shell.jsx";
+import { useAuth } from "../lib/auth.jsx";
 
-// Edite aqui para mudar o número/mensagem do WhatsApp
+// Número de agendamento/consultores
 const WHATSAPP_NUMERO = "5511999999999"; // ⚠️ TROQUE pelo número real com DDI (55) + DDD + número
-const WHATSAPP_MSG    = encodeURIComponent(
-  "Olá Gabriel, vi a Murev no Acompanha e gostaria de conversar sobre os protocolos."
-);
-const WHATSAPP_URL    = `https://wa.me/${WHATSAPP_NUMERO}?text=${WHATSAPP_MSG}`;
+
+function gerarUrlWhatsApp(perfil) {
+  const nome    = perfil?.nome    || "médico(a)";
+  const clinica = perfil?.clinica || "minha clínica";
+  const msg = encodeURIComponent(
+    `Olá, sou ${nome} da ${clinica}, vim pelo Murev Acompanha e gostaria de solicitar um orçamento de tirzepatida com um consultor.`
+  );
+  return `https://wa.me/${WHATSAPP_NUMERO}?text=${msg}`;
+}
 
 function Pilar({ Icon, titulo, texto }) {
   return (
@@ -25,6 +31,8 @@ function Pilar({ Icon, titulo, texto }) {
 
 export default function Sobre() {
   const isMobile = useIsMobile();
+  const { perfil } = useAuth();
+  const WHATSAPP_URL = gerarUrlWhatsApp(perfil);
 
   return (
     <div style={{ maxWidth: 720, margin: "0 auto", display: "flex", flexDirection: "column", gap: 36 }}>
@@ -91,14 +99,14 @@ export default function Sobre() {
         <div style={{ display: "flex", flexDirection: isMobile ? "column" : "row", gap: 22, alignItems: isMobile ? "flex-start" : "center" }}>
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: 1, textTransform: "uppercase", opacity: 0.7, marginBottom: 8 }}>
-              Quer ampliar sua operação?
+              Quer trabalhar com tirzepatida?
             </div>
             <h2 style={{ fontSize: 22, fontWeight: 700, marginBottom: 8, lineHeight: 1.25 }}>
-              Fale com Gabriel, nosso representante.
+              Solicite um orçamento com um de nossos consultores.
             </h2>
             <p style={{ fontSize: 14, opacity: 0.92, lineHeight: 1.55 }}>
-              Se você ainda não trabalha com nossa rede magistral ou quer condições especiais
-              para volume, é só chamar. Atendimento direto, sem intermediários.
+              Representamos farmácias de manipulação que seguem as boas práticas da ANVISA,
+              com laudo por lote e rastreabilidade completa. Atendimento direto, sem intermediários.
             </p>
           </div>
           <a
@@ -114,7 +122,7 @@ export default function Sobre() {
               whiteSpace: "nowrap",
             }}
           >
-            <MessageCircle size={18} /> Chamar no WhatsApp <ArrowRight size={16} />
+            <MessageCircle size={18} /> Solicitar orçamento <ArrowRight size={16} />
           </a>
         </div>
       </div>
