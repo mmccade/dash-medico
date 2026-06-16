@@ -18,6 +18,43 @@ import { validateCiclo, validatePaciente, primeiroErro } from "../lib/validate.j
 import { InputDecimal, InputInteiro, InputData, numeroParaMascara } from "../components/inputs.jsx";
 import ModalDesativar from "../components/ModalDesativar.jsx";
 
+// ─── Modal de confirmação de edição ──────────────────────────
+function ModalConfirmacaoEdicao({ titulo, campos, salvando, onConfirmar, onEditar, onFechar }) {
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 210, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: "var(--surface)", borderRadius: 18, width: "100%", maxWidth: 480, padding: "28px 26px", boxShadow: "0 20px 60px rgba(0,0,0,0.18)", maxHeight: "90vh", overflowY: "auto" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <h2 style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>{titulo}</h2>
+          <button onClick={onFechar} style={{ color: "var(--inkFaint)" }}><X size={20} /></button>
+        </div>
+        <p style={{ fontSize: 13, color: "var(--inkSoft)", marginBottom: 20 }}>Confira suas alterações antes de salvar.</p>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 0, marginBottom: 22, borderRadius: 12, overflow: "hidden", border: "1px solid var(--line)" }}>
+          {campos.map((c, i) => (
+            <div key={i} style={{
+              display: "flex", justifyContent: "space-between", alignItems: "flex-start",
+              padding: "11px 14px", gap: 12,
+              background: i % 2 === 0 ? "var(--surface)" : "var(--surface2)",
+            }}>
+              <span style={{ fontSize: 12.5, color: "var(--inkFaint)", fontWeight: 600, minWidth: 120, flexShrink: 0 }}>{c.label}</span>
+              <span style={{ fontSize: 13, color: "var(--ink)", textAlign: "right", wordBreak: "break-word", maxWidth: "60%" }}>{c.valor || "—"}</span>
+            </div>
+          ))}
+        </div>
+
+        <div style={{ display: "flex", gap: 10 }}>
+          <button onClick={onEditar} className="btn btn-ghost" style={{ flex: 1, justifyContent: "center" }}>
+            <Pencil size={14} /> Editar
+          </button>
+          <button onClick={onConfirmar} disabled={salvando} className="btn btn-primary" style={{ flex: 1, justifyContent: "center" }}>
+            {salvando ? <><Loader2 size={14} className="spin" /> Salvando…</> : <><Check size={14} /> Está certo, salvar</>}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── Modal de filtro de PDF ───────────────────────────────────
 function ModalFiltroPdf({ ciclos, onGerar, onFechar }) {
   const [modo, setModo] = useState("total");
@@ -122,7 +159,7 @@ function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
   const [f, setF] = useState({
     ...ciclo,
     data: ciclo.data || "",
-    altura: alturaBase ? numeroParaMascara(alturaBase, 3, 2) : "",
+    altura: alturaBase ? String(Math.round(alturaBase * 100)) : "",
     peso: numeroParaMascara(ciclo.peso, 4, 1),
     gordura: numeroParaMascara(ciclo.gordura, 3, 1),
     visceral: ciclo.visceral != null ? String(ciclo.visceral) : "",
@@ -132,19 +169,28 @@ function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
     d4: ciclo.unidade === "MG" ? numeroParaMascara(ciclo.doses?.[3], 3, 1) : String(ciclo.doses?.[3] ?? ""),
   });
   const [salvando, setSalvando] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
+  const [dadosValidados, setDadosValidados] = useState(null);
   const toast = useToast();
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
 
   const pesoNum = parseNum(f.peso);
   const altNum  = parseNum(f.altura);
-  const imcCalc = pesoNum > 0 && altNum > 0 ? +(pesoNum / (altNum * altNum)).toFixed(1) : null;
+  const altMetros = altNum >= 100 ? altNum / 100 : altNum;
+  const imcCalc = pesoNum > 0 && altMetros > 0 ? +(pesoNum / (altMetros * altMetros)).toFixed(1) : null;
 
-  const salvar = async () => {
+  const irParaConfirmacao = () => {
     const raw = { ...f, doses: [f.d1, f.d2, f.d3, f.d4].map((d) => parseNum(d)) };
     const { data, errors } = validateCiclo(raw);
     if (errors.length) { toast(primeiroErro(errors)); return; }
+    setDadosValidados(data);
+    setConfirmando(true);
+  };
+
+  const salvar = async () => {
+    if (!dadosValidados) return;
     setSalvando(true);
-    await onSalvar(data);
+    await onSalvar(dadosValidados);
     onFechar();
   };
 
@@ -177,8 +223,8 @@ function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
               <InputDecimal value={f.peso} onChange={(v) => set("peso", v)} placeholder="109,5" digitos={4} decimais={1} />
             </div>
             <div className="field">
-              <label>Altura (m) <span style={{ fontSize: 11, color: "var(--inkFaint)" }}>opc.</span></label>
-              <InputDecimal value={f.altura} onChange={(v) => set("altura", v)} placeholder="1,64" digitos={3} decimais={2} />
+              <label>Altura (cm) <span style={{ fontSize: 11, color: "var(--inkFaint)" }}>opc.</span></label>
+              <InputInteiro value={f.altura} onChange={(v) => set("altura", v)} placeholder="164" max={250} />
             </div>
             <div>
               <div style={{ fontSize: 12, color: "var(--inkFaint)", marginBottom: 6 }}>IMC</div>
@@ -233,13 +279,34 @@ function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
 
           <div style={{ display: "flex", gap: 10 }}>
             <button onClick={onFechar} className="btn btn-ghost" style={{ flex: 1, justifyContent: "center" }}>Cancelar</button>
-            <button onClick={salvar} disabled={salvando} className="btn btn-primary" style={{ flex: 1, justifyContent: "center" }}>
-              {salvando ? <><Loader2 size={14} className="spin" /> Salvando…</> : <><Check size={14} /> Salvar</>}
+            <button onClick={irParaConfirmacao} className="btn btn-primary" style={{ flex: 1, justifyContent: "center" }}>
+              <Check size={14} /> Revisar alterações
             </button>
           </div>
         </div>
       </div>
     </div>
+  );
+
+  if (confirmando && dadosValidados) return (
+    <ModalConfirmacaoEdicao
+      titulo={`Revisar edição — ciclo ${ciclo.mes}`}
+      campos={[
+        { label: "Data", valor: dadosValidados.data ? fmtData(dadosValidados.data) : "—" },
+        { label: "Peso", valor: `${br(dadosValidados.peso)} kg` },
+        { label: "% Gordura", valor: dadosValidados.gordura ? `${br(dadosValidados.gordura)}%` : "—" },
+        { label: "Gordura visceral", valor: dadosValidados.visceral || "—" },
+        { label: "Doses (S1-S4)", valor: dadosValidados.doses.map(d => br(d)).join(" · ") + ` ${dadosValidados.unidade?.toLowerCase()}` },
+        { label: "Local", valor: dadosValidados.local },
+        { label: "Suplementação", valor: dadosValidados.suplementacao || "—" },
+        { label: "Colaterais", valor: dadosValidados.colaterais || "—" },
+        { label: "Observações", valor: dadosValidados.obs || "—" },
+      ]}
+      salvando={salvando}
+      onConfirmar={salvar}
+      onEditar={() => setConfirmando(false)}
+      onFechar={onFechar}
+    />
   );
 }
 
@@ -248,7 +315,7 @@ function ModalEditarPaciente({ p, onSalvar, onFechar }) {
   const [f, setF] = useState({
     nome: p.nome,
     idade: p.idade != null ? String(p.idade) : "",
-    altura: p.altura ? numeroParaMascara(p.altura, 3, 2) : "",
+    altura: p.altura ? String(Math.round(p.altura * 100)) : "",
     sexo: p.sexo,
     inicio: p.inicio,
     objetivo: p.objetivo,
@@ -257,20 +324,29 @@ function ModalEditarPaciente({ p, onSalvar, onFechar }) {
     visceralMeta: p.visceralMeta != null ? String(p.visceralMeta) : "",
   });
   const [salvando, setSalvando] = useState(false);
+  const [confirmando, setConfirmando] = useState(false);
+  const [dadosValidados, setDadosValidados] = useState(null);
   const toast = useToast();
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
 
   const pesoMetaNum = parseNum(f.pesoMeta);
   const altNum = parseNum(f.altura);
-  const imcMetaCalc = pesoMetaNum > 0 && altNum > 0 ? imcMeta(pesoMetaNum, altNum) : null;
+  const altMetros2 = altNum >= 100 ? altNum / 100 : altNum;
+  const imcMetaCalc = pesoMetaNum > 0 && altMetros2 > 0 ? imcMeta(pesoMetaNum, altMetros2) : null;
 
-  const salvar = async () => {
+  const irParaConfirmacao = () => {
     const { data, errors } = validatePaciente(f);
     if (errors.length) { toast(primeiroErro(errors)); return; }
     const pesoMeta = parseNum(f.pesoMeta) || null;
     const visceralMeta = parseNum(f.visceralMeta) || null;
+    setDadosValidados({ ...data, pesoMeta, visceralMeta });
+    setConfirmando(true);
+  };
+
+  const salvar = async () => {
+    if (!dadosValidados) return;
     setSalvando(true);
-    await onSalvar({ ...data, pesoMeta, visceralMeta });
+    await onSalvar(dadosValidados);
     onFechar();
   };
 
@@ -294,8 +370,8 @@ function ModalEditarPaciente({ p, onSalvar, onFechar }) {
               <InputInteiro value={f.idade} onChange={(v) => set("idade", v)} placeholder="42" max={130} style={inpStyle} />
             </div>
             <div className="field">
-              <label>Altura (m)</label>
-              <InputDecimal value={f.altura} onChange={(v) => set("altura", v)} placeholder="1,64" digitos={3} decimais={2} style={inpStyle} />
+              <label>Altura (cm)</label>
+              <InputInteiro value={f.altura} onChange={(v) => set("altura", v)} placeholder="164" max={250} style={inpStyle} />
             </div>
           </div>
 
@@ -341,13 +417,34 @@ function ModalEditarPaciente({ p, onSalvar, onFechar }) {
 
           <div style={{ display: "flex", gap: 10 }}>
             <button onClick={onFechar} className="btn btn-ghost" style={{ flex: 1, justifyContent: "center" }}>Cancelar</button>
-            <button onClick={salvar} disabled={salvando} className="btn btn-primary" style={{ flex: 1, justifyContent: "center" }}>
-              {salvando ? <><Loader2 size={14} className="spin" /> Salvando…</> : "Salvar"}
+            <button onClick={irParaConfirmacao} className="btn btn-primary" style={{ flex: 1, justifyContent: "center" }}>
+              <Check size={14} /> Revisar alterações
             </button>
           </div>
         </div>
       </div>
     </div>
+  );
+
+  if (confirmando && dadosValidados) return (
+    <ModalConfirmacaoEdicao
+      titulo="Revisar edição do paciente"
+      campos={[
+        { label: "Nome", valor: dadosValidados.nome },
+        { label: "Idade", valor: dadosValidados.idade ? `${dadosValidados.idade} anos` : "—" },
+        { label: "Altura", valor: dadosValidados.altura ? `${Math.round(dadosValidados.altura * 100)} cm` : "—" },
+        { label: "Sexo", valor: dadosValidados.sexo },
+        { label: "Início", valor: fmtData(dadosValidados.inicio) },
+        { label: "Objetivo", valor: dadosValidados.objetivo },
+        { label: "Condições relatadas", valor: dadosValidados.comorbidades },
+        { label: "Peso meta", valor: dadosValidados.pesoMeta ? `${br(dadosValidados.pesoMeta)} kg` : "—" },
+        { label: "Visceral meta", valor: dadosValidados.visceralMeta ?? "—" },
+      ]}
+      salvando={salvando}
+      onConfirmar={salvar}
+      onEditar={() => setConfirmando(false)}
+      onFechar={onFechar}
+    />
   );
 }
 
@@ -490,9 +587,6 @@ export default function Ficha({ pacienteId, navegar }) {
         <div style={{ display: "flex", gap: 10, alignItems: "center", width: isMobile ? "100%" : "auto", flexWrap: "wrap" }}>
           {/* Toggle ativo/inativo */}
           <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "6px 10px", background: "var(--surface2)", borderRadius: 10 }}>
-            <span style={{ fontSize: 12, color: p.ativo ? "var(--good)" : "var(--inkFaint)", fontWeight: 600 }}>
-              {p.ativo ? "Ativo" : "Inativo"}
-            </span>
             <Toggle on={p.ativo} onClick={handleToggleAtivo} />
           </div>
           {algumaMetaBatida && (
