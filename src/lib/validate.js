@@ -62,7 +62,10 @@ export function validatePaciente(raw) {
   const comorbidades = str(raw.comorbidades, OBJ_MAX);
   const inicio    = isoDate(raw.inicio);
   const idadeR    = int(raw.idade, { min: 0, max: 130 });
-  const alturaR   = num(raw.altura, { min: 0.5, max: 2.5 });
+  // altura pode vir em cm (100-250) ou metros (0.5-2.5) — converte para metros
+  const alturaRaw = parseFloat(String(raw.altura ?? "").replace(",", "."));
+  const alturaMetros = (!isNaN(alturaRaw) && alturaRaw >= 100) ? alturaRaw / 100 : alturaRaw;
+  const alturaR   = num(alturaMetros, { min: 0.5, max: 2.5 });
 
   push("nome", nome.error);
   push("sexo", sexo.error);
