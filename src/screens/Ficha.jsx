@@ -5,7 +5,7 @@
 // + InputData em todos os campos de data
 // + PDF de meta batida disponível quando bater
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ArrowLeft, Stethoscope, FileText, ChevronDown, Pencil, Trash2, X, Loader2, Check, Trophy } from "lucide-react";
 import { useStore } from "../lib/store.jsx";
 import { useToast } from "../lib/toast.jsx";
@@ -17,6 +17,41 @@ import { baixarPdfPaciente, baixarPdfMetaBatida } from "../services/pdf.js";
 import { validateCiclo, validatePaciente, primeiroErro } from "../lib/validate.js";
 import { InputDecimal, InputInteiro, InputData, numeroParaMascara } from "../components/inputs.jsx";
 import ModalDesativar from "../components/ModalDesativar.jsx";
+
+// ─── Tela de sucesso pós-edição ──────────────────────────────
+function TelaEdicaoSucesso({ onFechar }) {
+  const [segundos, setSegundos] = useState(5);
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      setSegundos((s) => {
+        if (s <= 1) { clearInterval(t); onFechar(); return 0; }
+        return s - 1;
+      });
+    }, 1000);
+    return () => clearInterval(t);
+  }, [onFechar]);
+
+  return (
+    <div style={{ position: "fixed", inset: 0, zIndex: 210, background: "rgba(0,0,0,0.5)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ background: "var(--surface)", borderRadius: 18, width: "100%", maxWidth: 400, padding: "40px 32px", boxShadow: "0 20px 60px rgba(0,0,0,0.18)", textAlign: "center" }}>
+        <div style={{ width: 64, height: 64, borderRadius: "50%", background: "var(--goodSoft, #d1f5e8)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 20px" }}>
+          <Check size={30} color="var(--good)" strokeWidth={2.5} />
+        </div>
+        <h2 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8 }}>Informações salvas!</h2>
+        <p style={{ fontSize: 13.5, color: "var(--inkSoft)", marginBottom: 28, lineHeight: 1.5 }}>
+          As alterações foram salvas com sucesso.
+        </p>
+        <button onClick={onFechar} className="btn btn-primary" style={{ width: "100%", justifyContent: "center" }}>
+          Voltar
+        </button>
+        <p style={{ fontSize: 12, color: "var(--inkFaint)", marginTop: 14 }}>
+          Fechando automaticamente em {segundos}s…
+        </p>
+      </div>
+    </div>
+  );
+}
 
 // ─── Modal de confirmação de edição ──────────────────────────
 function ModalConfirmacaoEdicao({ titulo, campos, salvando, onConfirmar, onEditar, onFechar }) {
@@ -169,7 +204,7 @@ function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
     d4: ciclo.unidade === "MG" ? numeroParaMascara(ciclo.doses?.[3], 3, 1) : String(ciclo.doses?.[3] ?? ""),
   });
   const [salvando, setSalvando] = useState(false);
-  const [confirmando, setConfirmando] = useState(false);
+  const [etapa, setEtapa] = useState("form"); // "form" | "revisar" | "sucesso"
   const [dadosValidados, setDadosValidados] = useState(null);
   const toast = useToast();
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
@@ -184,14 +219,15 @@ function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
     const { data, errors } = validateCiclo(raw);
     if (errors.length) { toast(primeiroErro(errors)); return; }
     setDadosValidados(data);
-    setConfirmando(true);
+    setEtapa("revisar");
   };
 
   const salvar = async () => {
     if (!dadosValidados) return;
     setSalvando(true);
     await onSalvar(dadosValidados);
-    onFechar();
+    setSalvando(false);
+    setEtapa("sucesso");
   };
 
   const isMG = (f.unidade || "MG") === "MG";
@@ -288,7 +324,9 @@ function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
     </div>
   );
 
-  if (confirmando && dadosValidados) return (
+  if (etapa === "sucesso") return <TelaEdicaoSucesso onFechar={onFechar} />;
+
+  if (etapa === "revisar" && dadosValidados) return (
     <ModalConfirmacaoEdicao
       titulo={`Revisar edição — ciclo ${ciclo.mes}`}
       campos={[
@@ -304,7 +342,7 @@ function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
       ]}
       salvando={salvando}
       onConfirmar={salvar}
-      onEditar={() => setConfirmando(false)}
+      onEditar={() => setEtapa("form")}
       onFechar={onFechar}
     />
   );
@@ -324,7 +362,7 @@ function ModalEditarPaciente({ p, onSalvar, onFechar }) {
     visceralMeta: p.visceralMeta != null ? String(p.visceralMeta) : "",
   });
   const [salvando, setSalvando] = useState(false);
-  const [confirmando, setConfirmando] = useState(false);
+  const [etapa, setEtapa] = useState("form"); // "form" | "revisar" | "sucesso"
   const [dadosValidados, setDadosValidados] = useState(null);
   const toast = useToast();
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
@@ -340,14 +378,15 @@ function ModalEditarPaciente({ p, onSalvar, onFechar }) {
     const pesoMeta = parseNum(f.pesoMeta) || null;
     const visceralMeta = parseNum(f.visceralMeta) || null;
     setDadosValidados({ ...data, pesoMeta, visceralMeta });
-    setConfirmando(true);
+    setEtapa("revisar");
   };
 
   const salvar = async () => {
     if (!dadosValidados) return;
     setSalvando(true);
     await onSalvar(dadosValidados);
-    onFechar();
+    setSalvando(false);
+    setEtapa("sucesso");
   };
 
   const inpStyle = { padding: "9px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13.5, width: "100%", color: "var(--ink)", boxSizing: "border-box" };
@@ -426,7 +465,9 @@ function ModalEditarPaciente({ p, onSalvar, onFechar }) {
     </div>
   );
 
-  if (confirmando && dadosValidados) return (
+  if (etapa === "sucesso") return <TelaEdicaoSucesso onFechar={onFechar} />;
+
+  if (etapa === "revisar" && dadosValidados) return (
     <ModalConfirmacaoEdicao
       titulo="Revisar edição do paciente"
       campos={[
@@ -442,7 +483,7 @@ function ModalEditarPaciente({ p, onSalvar, onFechar }) {
       ]}
       salvando={salvando}
       onConfirmar={salvar}
-      onEditar={() => setConfirmando(false)}
+      onEditar={() => setEtapa("form")}
       onFechar={onFechar}
     />
   );
