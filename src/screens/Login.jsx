@@ -67,16 +67,16 @@ export default function Login() {
               Acesse o acompanhamento dos seus pacientes.
             </p>
 
-            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+            <form onSubmit={(e) => { e.preventDefault(); submeter(); }} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <div className="field">
                 <label>Email</label>
-                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && submeter()} placeholder="seu@email.com" autoComplete="email" />
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value.replace(/\s/g, ""))}
+                  placeholder="seu@email.com" autoComplete="email" />
               </div>
               <div className="field">
                 <label>Senha</label>
                 <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && submeter()} placeholder="••••••••" autoComplete="current-password" />
+                  placeholder="••••••••" autoComplete="current-password" />
               </div>
 
               {/* Manter conectado */}
@@ -100,7 +100,7 @@ export default function Login() {
                 </div>
               )}
 
-              <button className="btn btn-primary" onClick={submeter} disabled={carregando}
+              <button type="submit" className="btn btn-primary" disabled={carregando}
                 style={{ marginTop: 4, opacity: carregando ? 0.7 : 1 }}>
                 {carregando ? <Loader2 size={16} className="spin" /> : <LogIn size={16} />}
                 Entrar
@@ -108,12 +108,12 @@ export default function Login() {
 
               {/* Link esqueci minha senha */}
               <div style={{ textAlign: "center", marginTop: 4 }}>
-                <button onClick={() => { setModoReset(true); setEmailReset(email); setErro(""); }}
+                <button type="button" onClick={() => { setModoReset(true); setEmailReset(email); setErro(""); }}
                   style={{ fontSize: 13, color: "var(--brand)", fontWeight: 600 }}>
                   Esqueci minha senha
                 </button>
               </div>
-            </div>
+            </form>
           </div>
         )}
 
@@ -139,11 +139,11 @@ export default function Login() {
                 </button>
               </div>
             ) : (
-              <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <form onSubmit={(e) => { e.preventDefault(); enviarReset(); }} style={{ display: "flex", flexDirection: "column", gap: 14 }}>
                 <div className="field">
                   <label>Email da conta</label>
-                  <input type="email" value={emailReset} onChange={(e) => setEmailReset(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && enviarReset()} placeholder="seu@email.com" autoComplete="email" />
+                  <input type="email" value={emailReset} onChange={(e) => setEmailReset(e.target.value.replace(/\s/g, ""))}
+                    placeholder="seu@email.com" autoComplete="email" />
                 </div>
 
                 {resetErro && (
@@ -152,16 +152,16 @@ export default function Login() {
                   </div>
                 )}
 
-                <button className="btn btn-primary" onClick={enviarReset} disabled={resetCarregando}
+                <button type="submit" className="btn btn-primary" disabled={resetCarregando}
                   style={{ opacity: resetCarregando ? 0.7 : 1 }}>
                   {resetCarregando ? <Loader2 size={16} className="spin" /> : <Mail size={16} />}
                   Enviar link de redefinição
                 </button>
 
-                <button className="btn btn-ghost" onClick={() => setModoReset(false)}>
+                <button type="button" className="btn btn-ghost" onClick={() => setModoReset(false)}>
                   Voltar ao login
                 </button>
-              </div>
+              </form>
             )}
           </div>
         )}
