@@ -159,7 +159,7 @@ export default function MeuPerfil() {
           <div className="field">
             <label>Novo email</label>
             <input style={inp} type="email" maxLength={254} value={novoEmail}
-              onChange={(e) => setNovoEmail(e.target.value)} placeholder="novo@email.com" autoComplete="email" />
+              onChange={(e) => setNovoEmail(e.target.value.replace(/\s/g, ""))} placeholder="novo@email.com" autoComplete="email" />
           </div>
           <div className="field">
             <label>Confirme sua senha atual</label>
