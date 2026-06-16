@@ -113,6 +113,24 @@ function FiltroPeriodo({ periodo, setPeriodo, dataInicio, setDataInicio, dataFim
   );
 }
 
+// ── Chip de motivo de desativação ──────────────────────────────
+const MOTIVO_MAP = {
+  meta_batida:  { label: "Bateu a meta",       cor: "var(--good)",    bg: "var(--goodSoft, #d1f5e8)" },
+  sumiu:        { label: "Sumiu / Não voltou",  cor: "var(--warn)",    bg: "#fff0e6" },
+  outros:       { label: "Outros motivos",      cor: "var(--inkSoft)", bg: "var(--surface2)" },
+  nao_informar: { label: "Não informado",       cor: "var(--inkFaint)", bg: "var(--surface2)" },
+};
+
+function MotivoChip({ motivo }) {
+  const m = MOTIVO_MAP[motivo] || { label: motivo || "Não informado", cor: "var(--inkFaint)", bg: "var(--surface2)" };
+  return (
+    <span style={{
+      fontSize: 11.5, fontWeight: 700, padding: "4px 10px", borderRadius: 20,
+      background: m.bg, color: m.cor, whiteSpace: "nowrap",
+    }}>{m.label}</span>
+  );
+}
+
 // ── FaixaBar ────────────────────────────────────────────────────
 function FaixaBar({ faixas, cor }) {
   const max = Math.max(1, ...Object.values(faixas));
@@ -340,6 +358,21 @@ export default function Relatorio() {
       return out;
     };
 
+    // Contagem de motivos de desativação
+    const MOTIVO_LABEL = {
+      meta_batida: "Bateu a meta",
+      sumiu: "Sumiu / Não voltou",
+      outros: "Outros motivos",
+      nao_informar: "Não informado",
+    };
+    const motivosCount = {};
+    inativosNoPeriodo.forEach((p) => {
+      const m = MOTIVO_LABEL[p.motivoDesativacao] || "Não informado";
+      motivosCount[m] = (motivosCount[m] || 0) + 1;
+    });
+    const motivosRanking = Object.entries(motivosCount)
+      .sort((a, b) => b[1] - a[1]);
+
     return {
       novos: novosNoPeriodo.length,
       inativos: inativosNoPeriodo.length,
@@ -348,6 +381,7 @@ export default function Relatorio() {
       pesoTotal: +pesoTotalReduzido.toFixed(1),
       faixasNovos: contarFaixas(novosNoPeriodo),
       faixasInativos: contarFaixas(inativosNoPeriodo),
+      motivosRanking,
     };
   }, [pacientes, limite, hoje, periodo, dataFim]);
 
@@ -437,6 +471,58 @@ export default function Relatorio() {
               )}
             </div>
           </div>
+
+          {/* Inativos com motivo */}
+          {dados.inativosLista && dados.inativosLista.length > 0 && (
+            <div className="card" style={{ padding: "20px 22px" }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+                <UserMinus size={15} color="var(--warn)" /> Desativados no período
+              </h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: 0, borderRadius: 10, overflow: "hidden", border: "1px solid var(--line)" }}>
+                {dados.inativosLista.map((p, i) => (
+                  <div key={p.id} style={{
+                    display: "flex", justifyContent: "space-between", alignItems: "center",
+                    padding: "11px 14px", gap: 12, flexWrap: "wrap",
+                    background: i % 2 === 0 ? "var(--surface)" : "var(--surface2)",
+                  }}>
+                    <div>
+                      <div style={{ fontSize: 13.5, fontWeight: 600 }}>{p.nome}</div>
+                      {p.desativadoEm && (
+                        <div style={{ fontSize: 12, color: "var(--inkFaint)", marginTop: 2 }}>
+                          {fmtData(p.desativadoEm.slice ? p.desativadoEm.slice(0,10) : p.desativadoEm)}
+                          {p.detalhesDesativacao ? ` · ${p.detalhesDesativacao}` : ""}
+                        </div>
+                      )}
+                    </div>
+                    <MotivoChip motivo={p.motivoDesativacao} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Motivos de desativação */}
+          {dados.motivosRanking.length > 0 && (
+            <div className="card" style={{ padding: "20px 22px" }}>
+              <h3 style={{ fontSize: 14, fontWeight: 700, marginBottom: 16, display: "flex", alignItems: "center", gap: 8 }}>
+                <UserMinus size={15} color="var(--warn)" /> Motivos de desativação
+              </h3>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {dados.motivosRanking.map(([label, count]) => {
+                  const maxCount = dados.motivosRanking[0][1];
+                  return (
+                    <div key={label} style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <span style={{ fontSize: 13, color: "var(--ink)", minWidth: 160, fontWeight: 500 }}>{label}</span>
+                      <div style={{ flex: 1, height: 8, background: "var(--surface2)", borderRadius: 99, overflow: "hidden" }}>
+                        <div style={{ width: `${(count / maxCount) * 100}%`, height: "100%", background: "var(--warn)", borderRadius: 99, transition: "width 0.3s" }} />
+                      </div>
+                      <span className="tnum" style={{ fontSize: 13, fontWeight: 700, color: "var(--warn)", minWidth: 24, textAlign: "right" }}>{count}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
 
           <div style={{ fontSize: 11.5, color: "var(--inkFaint)", lineHeight: 1.6, textAlign: "center", padding: "8px 16px" }}>
             Os números são calculados a partir dos dados registrados no sistema. Peso eliminado considera a diferença entre o primeiro e o último ciclo de cada paciente dentro do período.
