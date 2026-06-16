@@ -72,8 +72,17 @@ export async function criarPacientesEmLote(uid, lista) {
   return criados;
 }
 
+// Remove chaves com valor undefined (Firestore rejeita undefined e lança erro)
+function limparUndefined(obj) {
+  const out = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== undefined) out[k] = v;
+  }
+  return out;
+}
+
 export async function atualizarPaciente(uid, pacienteId, campos) {
-  await updateDoc(doc(db, "usuarios", uid, "pacientes", pacienteId), campos);
+  await updateDoc(doc(db, "usuarios", uid, "pacientes", pacienteId), limparUndefined(campos));
 }
 
 export async function removerPaciente(uid, pacienteId) {
