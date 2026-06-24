@@ -12,6 +12,34 @@ export const fmtData = (iso) => {
 export const ultimoCiclo = (p) => p.ciclos[p.ciclos.length - 1];
 export const primeiroCiclo = (p) => p.ciclos[0];
 
+// ─── Massa magra ─────────────────────────────────────────────
+// Retorna a massa magra (kg) de um ciclo. Prioridade:
+//  1. massaMagra explícita (kg) informada pelo médico
+//  2. derivada de peso e % gordura: peso × (1 − gordura/100)
+//  3. derivada de massaMagraPct (%) × peso
+// Retorna null se não houver dados suficientes.
+export const massaMagraKg = (c) => {
+  if (c == null) return null;
+  if (c.massaMagra != null && c.massaMagra !== "") return +(+c.massaMagra).toFixed(1);
+  if (c.massaMagraPct != null && c.massaMagraPct !== "" && c.peso) {
+    return +((c.peso * c.massaMagraPct) / 100).toFixed(1);
+  }
+  if (c.gordura != null && c.gordura !== "" && c.peso) {
+    return +(c.peso * (1 - c.gordura / 100)).toFixed(1);
+  }
+  return null;
+};
+
+// Massa magra como % do peso. Usa massaMagraPct se houver, senão deriva de % gordura.
+export const massaMagraPct = (c) => {
+  if (c == null) return null;
+  if (c.massaMagraPct != null && c.massaMagraPct !== "") return +(+c.massaMagraPct).toFixed(1);
+  const kg = massaMagraKg(c);
+  if (kg != null && c.peso) return +((kg / c.peso) * 100).toFixed(1);
+  if (c.gordura != null && c.gordura !== "") return +(100 - c.gordura).toFixed(1);
+  return null;
+};
+
 export const perdaPeso = (p) =>
   p.ciclos.length > 1 ? +(primeiroCiclo(p).peso - ultimoCiclo(p).peso).toFixed(1) : 0;
 
