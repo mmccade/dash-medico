@@ -6,7 +6,7 @@
 //  - Redefinir senha
 
 import { useState } from "react";
-import { Eye, EyeOff, Loader2, Mail, KeyRound, User } from "lucide-react";
+import { Eye, EyeOff, Loader2, Mail, KeyRound, User, CreditCard, ArrowUpDown, XCircle, MessageCircle } from "lucide-react";
 import { useAuth } from "../lib/auth.jsx";
 import { redefinirSenha, traduzErroAuth } from "../services/auth.js";
 import {
@@ -56,9 +56,39 @@ function InfoRow({ label, value, accent }) {
 }
 
 // ─── Tela principal ───────────────────────────────────────────
+// WhatsApp comercial da Murev — usado como canal de gestão de assinatura
+// enquanto o portal de autogestão da Cacto não estiver plugado.
+const WHATSAPP_MUREV = "https://wa.me/55SEUNUMERO"; // TODO: trocar pelo número real
+
 export default function MeuPerfil() {
   const { user, perfil } = useAuth();
   const toast = useToast();
+
+  // ── gerenciar assinatura ──
+  const [abrindoPortal, setAbrindoPortal] = useState(false);
+
+  // Abre o portal de autogestão da Cacto (se houver URL configurada) ou cai pro WhatsApp.
+  // Quando a Cacto expuser o link do customer portal, basta preencher perfil.cactoPortalUrl
+  // (gravado pelo webhook) ou a env VITE_CACTO_PORTAL_URL.
+  const abrirGestaoAssinatura = (assunto) => {
+    setAbrindoPortal(true);
+    const portal = perfil?.cactoPortalUrl || import.meta.env.VITE_CACTO_PORTAL_URL;
+    if (portal) {
+      window.open(portal, "_blank", "noopener,noreferrer");
+    } else {
+      const msg = encodeURIComponent(
+        `Olá! Sou ${user?.email} e gostaria de ${assunto} da minha assinatura do Murev Acompanha.`
+      );
+      window.open(`${WHATSAPP_MUREV}?text=${msg}`, "_blank", "noopener,noreferrer");
+    }
+    setTimeout(() => setAbrindoPortal(false), 800);
+  };
+
+  const trocarPlano = () => abrirGestaoAssinatura("trocar o plano");
+  const cancelarAssinatura = () => {
+    if (!window.confirm("Deseja solicitar o cancelamento da renovação? Seu acesso continua ativo até o fim do período já pago.")) return;
+    abrirGestaoAssinatura("cancelar a renovação");
+  };
 
   // ── trocar email ──
   const [novoEmail, setNovoEmail] = useState("");
@@ -149,6 +179,30 @@ export default function MeuPerfil() {
           </div>
         )}
       </Secao>
+
+      {/* ── Gerenciar assinatura ── */}
+      {planoAtivo && (
+        <Secao titulo="Assinatura" Icon={CreditCard}>
+          <p style={{ fontSize: 13, color: "var(--inkSoft)", marginBottom: 16, lineHeight: 1.6 }}>
+            Sua cobrança é processada com segurança pela Cacto. Você pode trocar de plano ou
+            cancelar a renovação a qualquer momento.
+          </p>
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <button className="btn btn-ghost" onClick={trocarPlano} disabled={abrindoPortal}
+              style={{ width: "100%", justifyContent: "flex-start", gap: 9 }}>
+              <ArrowUpDown size={15} color="var(--brand)" /> Trocar de plano
+            </button>
+            <button className="btn btn-ghost" onClick={cancelarAssinatura} disabled={abrindoPortal}
+              style={{ width: "100%", justifyContent: "flex-start", gap: 9 }}>
+              <XCircle size={15} color="var(--warn)" /> Cancelar renovação
+            </button>
+          </div>
+          <p style={{ fontSize: 12, color: "var(--inkFaint)", marginTop: 14, lineHeight: 1.6 }}>
+            Ao cancelar, seu acesso permanece ativo até o fim do período já pago. Seus pacientes e
+            registros nunca são apagados.
+          </p>
+        </Secao>
+      )}
 
       {/* ── Trocar email ── */}
       <Secao titulo="Trocar email" Icon={Mail}>
