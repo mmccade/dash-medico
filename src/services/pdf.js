@@ -3,7 +3,7 @@
 // + baixarPdfMetaBatida(): PDF de parabenização (antes/depois, IMC, gordura visceral,
 //   mensagem do médico editável)
 
-import { imc, br, fmtData, primeiroCiclo, ultimoCiclo, mesesTrat, imcMeta } from "../lib/utils.js";
+import { imc, br, fmtData, primeiroCiclo, ultimoCiclo, mesesTrat, imcMeta, massaMagraKg } from "../lib/utils.js";
 
 const esc = (s) =>
   (s == null ? "" : String(s)).replace(/[&<>"]/g, (c) =>
@@ -88,7 +88,7 @@ export function htmlPaciente(p, config) {
     <div style="border:1px solid #dde5e5;border-radius:10px;padding:14px 16px;margin-bottom:12px;page-break-inside:avoid">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
         <span style="font-size:15px;font-weight:700;color:#27322f">${esc(c.mes)}${c.data ? ` · ${fmtData(c.data)}` : ""}</span>
-        <span style="font-size:12px;color:#0d7a82;font-weight:600">${br(c.peso)} kg · ${br(c.gordura)}% gordura · visceral ${c.visceral}</span>
+        <span style="font-size:12px;color:#0d7a82;font-weight:600">${br(c.peso)} kg · ${br(c.gordura)}% gordura${massaMagraKg(c) != null ? ` · ${br(massaMagraKg(c))} kg magra` : ""} · visceral ${c.visceral}</span>
       </div>
       <div style="display:flex;gap:6px;margin-bottom:10px">
         ${c.doses.map((d, i) => `
@@ -204,6 +204,7 @@ export function htmlEvolucao(p, config, Chart) {
           ${delta("Peso", f.peso, u.peso, " kg")}
           ${delta("IMC", imc(f.peso, p.altura), imc(u.peso, p.altura), "")}
           ${delta("% Gordura", f.gordura, u.gordura, "%")}
+          ${massaMagraKg(f) != null && massaMagraKg(u) != null ? delta("Massa magra", massaMagraKg(f), massaMagraKg(u), " kg") : ""}
           ${delta("Gordura visceral", f.visceral, u.visceral, "")}
         </tbody>
       </table>
@@ -218,6 +219,7 @@ export function htmlEvolucao(p, config, Chart) {
           ${linhaTab("Peso (kg)", (c) => br(c.peso))}
           ${linhaTab("IMC", (c) => br(imc(c.peso, p.altura)))}
           ${linhaTab("% Gordura", (c) => br(c.gordura))}
+          ${p.ciclos.some((c) => massaMagraKg(c) != null) ? linhaTab("Massa magra (kg)", (c) => { const m = massaMagraKg(c); return m != null ? br(m) : "—"; }) : ""}
           ${linhaTab("Visceral", (c) => c.visceral)}
           ${linhaTab("Dose final", (c) => br(c.doses[c.doses.length - 1]) + " " + c.unidade.toLowerCase())}
         </tbody>
