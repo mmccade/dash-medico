@@ -52,7 +52,9 @@ function admin() {
 function extrairConteudo(body) {
   const raw = typeof body === "string" ? safeParse(body) : (body || {});
   const p = raw.payload || raw;       // o "miolo" do evento
-  const data = p.data || p;           // os dados da venda
+  // IMPORTANTE: a Cakto manda data como ARRAY [{...}]. Pega o 1º item.
+  let data = p.data ?? p;
+  if (Array.isArray(data)) data = data[0] || {};
   const event = p.event || raw.event || data.event || "";
   const secret = p.secret || raw.secret || data.secret || "";
   return { data, event, secret };
@@ -84,40 +86,87 @@ function classificar(event) {
 }
 
 // ─── Inferência de plano ─────────────────────────────────────
-// A Cakto manda subscription_period (ex: "monthly") e/ou o tipo do produto.
+// A Cakto manda recurrence_period EM DIAS (7=semanal, 30=mensal, 90=trimestral,
+// 365=anual) dentro de subscription, e/ou o nome da oferta ("Semanal", etc.).
 function inferirPlano(data) {
-  const periodo = String(
-    data.subscription_period ||
-    data.subscription?.period ||
-    data.subscription?.interval ||
-    data.offer?.period ||
-    ""
+  // 1) recurrence_period em dias (dado mais confiável)
+  const dias = Number(
+    data.subscription?.recurrence_period ??
+    data.recurrence_period ??
+    0
+  );
+  if (dias > 0) {
+    if (dias <= 10) return "semanal";
+    if (dias <= 45) return "mensal";
+    if (dias <= 120) return "trimestral";
+    return "anual";
+  }
+
+  // 2) nome da oferta / texto do período
+  const txt = String(
+    data.offer?.name || data.subscription_period || data.offer?.period || ""
   ).toLowerCase();
+  if (txt.includes("seman") || txt.includes("week")) return "semanal";
+  if (txt.includes("year") || txt.includes("anual") || txt.includes("annual")) return "anual";
+  if (txt.includes("quarter") || txt.includes("trimes")) return "trimestral";
+  if (txt.includes("month") || txt.includes("mens")) return "mensal";
 
-  if (periodo.includes("year") || periodo.includes("anual") || periodo.includes("annual")) return "anual";
-  if (periodo.includes("quarter") || periodo.includes("trimes") || periodo.includes("3")) return "trimestral";
-  if (periodo.includes("month") || periodo.includes("mens")) return "mensal";
-
-  // fallback por valor pago
+  // 3) fallback por valor pago
   const bruto = Number(data.amount ?? data.offer?.price ?? data.baseAmount ?? 0);
   if (bruto >= 150) return "anual";
   if (bruto >= 60) return "trimestral";
-  if (bruto > 0) return "mensal";
+  if (bruto >= 30) return "mensal";
+  if (bruto > 0) return "semanal";
   return "mensal";
 }
 
-const DIAS_PLANO = { mensal: 31, trimestral: 93, anual: 366, vitalicio: 36500 };
+const DIAS_PLANO = { semanal: 8, mensal: 31, trimestral: 93, anual: 366, vitalicio: 36500 };
 
-// ─── Extração de campos ──────────────────────────────────────
+// ─── Busca recursiva: varre o objeto inteiro procurando a 1ª chave ──
+// que dê match (case-insensitive) e tenha valor string não-vazio.
+function buscarProfundo(obj, regexChave, validar) {
+  const visto = new Set();
+  function rec(o) {
+    if (!o || typeof o !== "object" || visto.has(o)) return null;
+    visto.add(o);
+    for (const [k, v] of Object.entries(o)) {
+      if (typeof v === "string" && regexChave.test(k)) {
+        const val = v.trim();
+        if (val && (!validar || validar(val))) return val;
+      }
+    }
+    // só depois desce nos filhos (prioriza nível raso)
+    for (const v of Object.values(o)) {
+      if (v && typeof v === "object") {
+        const achou = rec(v);
+        if (achou) return achou;
+      }
+    }
+    return null;
+  }
+  return rec(obj);
+}
+
+const RE_EMAIL_VALIDO = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// ─── Extração de campos (com fallback recursivo) ─────────────
 function extrairEmail(data) {
-  const e = data.customer?.email || data.buyer?.email || data.email;
-  return e ? String(e).trim().toLowerCase() : null;
+  // 1) caminhos conhecidos
+  const direto = data.customer?.email || data.buyer?.email || data.email
+    || data.client?.email || data.user?.email;
+  if (direto && RE_EMAIL_VALIDO.test(direto)) return String(direto).trim().toLowerCase();
+  // 2) varre o payload inteiro atrás de qualquer "email" válido
+  const achado = buscarProfundo(data, /email/i, (v) => RE_EMAIL_VALIDO.test(v));
+  return achado ? achado.toLowerCase() : null;
 }
 function extrairNome(data) {
-  return data.customer?.name || data.buyer?.name || data.name || "";
+  const direto = data.customer?.name || data.buyer?.name || data.name;
+  if (direto) return String(direto).trim();
+  return buscarProfundo(data, /^(name|nome|customerName|fullName)$/i) || "";
 }
 function extrairEventoId(data) {
-  return data.id || data.refId || data.subscription?.id || data.checkout || null;
+  return data.id || data.refId || data.subscription?.id || data.checkout
+    || buscarProfundo(data, /^(id|transactionId|orderId|refId)$/i) || null;
 }
 
 // ─── Handler ─────────────────────────────────────────────────
@@ -153,7 +202,12 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, ignorado: true, event });
   }
   if (!email) {
-    console.warn("[webhook-cacto] payload sem email", { event, acao });
+    // loga a estrutura recebida pra diagnosticar onde está o email
+    let amostra = "";
+    try {
+      amostra = JSON.stringify(data).slice(0, 1500);
+    } catch { amostra = "(não serializável)"; }
+    console.warn("[webhook-cacto] payload sem email", { event, acao, chaves: Object.keys(data || {}), amostra });
     return res.status(200).json({ ok: true, semEmail: true });
   }
 
@@ -265,7 +319,7 @@ async function pausar({ db, email, event }) {
 }
 
 // ─── E-mails ─────────────────────────────────────────────────
-const LABEL_PLANO = { mensal: "Mensal", trimestral: "Trimestral", anual: "Anual", vitalicio: "Vitalício" };
+const LABEL_PLANO = { semanal: "Semanal", mensal: "Mensal", trimestral: "Trimestral", anual: "Anual", vitalicio: "Vitalício" };
 
 async function enviarBoasVindas(email, nome, plano, link) {
   const resend = new Resend(process.env.RESEND_API_KEY);
