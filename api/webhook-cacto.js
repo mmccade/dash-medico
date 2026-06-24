@@ -292,7 +292,8 @@ async function aprovar({ auth, db, email, data }) {
   }
 
   const nome = extrairNome(data);
-  if (contaNova) {
+  // Manda boas-vindas se: conta nova OU doc não existia (primeiro pagamento mesmo que conta Auth já existisse)
+  if (contaNova || !snap.exists) {
     const link = await auth.generatePasswordResetLink(email, {
       url: process.env.APP_LOGIN_URL || "https://app.murev.com.br/login",
     });
@@ -324,7 +325,7 @@ const LABEL_PLANO = { semanal: "Semanal", mensal: "Mensal", trimestral: "Trimest
 async function enviarBoasVindas(email, nome, plano, link) {
   const resend = new Resend(process.env.RESEND_API_KEY);
   await resend.emails.send({
-    from: "Murev Acompanha <noreply@murev.com.br>",
+    from: "Murev Acompanha <noreply@app.murev.com.br>",
     to: email,
     subject: "Seu acesso ao Murev Acompanha está pronto 🎉",
     html: emailHtml({
@@ -341,7 +342,7 @@ async function enviarBoasVindas(email, nome, plano, link) {
 async function enviarRenovacao(email, nome, plano) {
   const resend = new Resend(process.env.RESEND_API_KEY);
   await resend.emails.send({
-    from: "Murev Acompanha <noreply@murev.com.br>",
+    from: "Murev Acompanha <noreply@app.murev.com.br>",
     to: email,
     subject: "Assinatura Murev Acompanha confirmada",
     html: emailHtml({
