@@ -25,7 +25,7 @@ export default function NovoCiclo({ pacienteId, navegar }) {
   const hoje = new Date().toISOString().slice(0, 10);
   const [f, setF] = useState({
     data: hoje,
-    peso: "", gordura: "", visceral: "",
+    peso: "", gordura: "", massaMagra: "", visceral: "",
     unidade: "MG", d1: "", d2: "", d3: "", d4: "",
     local: "Casa", suplementacao: "", colaterais: "", obs: "",
   });
@@ -35,6 +35,11 @@ export default function NovoCiclo({ pacienteId, navegar }) {
   const isMG = f.unidade === "MG";
   const [salvando, setSalvando] = useState(false);
   const temDados = f.peso || f.obs.trim();
+
+  // Sugestão de massa magra = peso × (1 − %gordura/100), quando ambos preenchidos
+  const pesoN = parseNum(f.peso);
+  const gordN = parseNum(f.gordura);
+  const sugestaoMagra = pesoN > 0 && gordN > 0 ? +(pesoN * (1 - gordN / 100)).toFixed(1) : null;
 
   const voltar = () => {
     if (temDados && !window.confirm("Descartar os dados preenchidos e voltar?")) return;
@@ -46,7 +51,7 @@ export default function NovoCiclo({ pacienteId, navegar }) {
     const mesLabel = labelMes(f.data);
     const rawCiclo = {
       mes: mesLabel, data: f.data,
-      peso: f.peso, gordura: f.gordura, visceral: f.visceral,
+      peso: f.peso, gordura: f.gordura, massaMagra: f.massaMagra, visceral: f.visceral,
       unidade: f.unidade,
       doses: [f.d1, f.d2, f.d3, f.d4].map(parseNum),
       local: f.local, suplementacao: f.suplementacao, colaterais: f.colaterais, obs: f.obs,
@@ -90,6 +95,16 @@ export default function NovoCiclo({ pacienteId, navegar }) {
           <div className="field">
             <label>% Gordura</label>
             <InputDecimal value={f.gordura} onChange={(v) => set("gordura", v)} placeholder="34,0" digitos={3} decimais={1} />
+          </div>
+          <div className="field">
+            <label>Massa magra (kg)</label>
+            <InputDecimal value={f.massaMagra} onChange={(v) => set("massaMagra", v)} placeholder="62,5" digitos={4} decimais={1} />
+            {sugestaoMagra && !f.massaMagra && (
+              <button type="button" onClick={() => set("massaMagra", String(sugestaoMagra).replace(".", ","))}
+                style={{ fontSize: 11.5, color: "var(--brand)", marginTop: 5, display: "block" }}>
+                Estimar ≈ {String(sugestaoMagra).replace(".", ",")} kg (peso − gordura)
+              </button>
+            )}
           </div>
           <div className="field">
             <label>Gordura visceral</label>
