@@ -9,7 +9,7 @@ import { useState, useEffect } from "react";
 import { ArrowLeft, Stethoscope, FileText, ChevronDown, Pencil, Trash2, X, Loader2, Check, Trophy } from "lucide-react";
 import { useStore } from "../lib/store.jsx";
 import { useToast } from "../lib/toast.jsx";
-import { imc, br, fmtData, primeiroCiclo, ultimoCiclo, perdaPeso, mesesTrat, parseNum, imcMeta, metaPesoBatida, metaVisceralBatida } from "../lib/utils.js";
+import { imc, br, fmtData, primeiroCiclo, ultimoCiclo, perdaPeso, mesesTrat, parseNum, imcMeta, metaPesoBatida, metaVisceralBatida, massaMagraKg } from "../lib/utils.js";
 import { Avatar, Toggle } from "../components/ui.jsx";
 import { LinhaChart } from "../components/charts.jsx";
 import { useIsMobile } from "../components/Shell.jsx";
@@ -197,6 +197,7 @@ function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
     altura: alturaBase ? String(Math.round(alturaBase * 100)) : "",
     peso: numeroParaMascara(ciclo.peso, 4, 1),
     gordura: numeroParaMascara(ciclo.gordura, 3, 1),
+    massaMagra: ciclo.massaMagra != null ? numeroParaMascara(ciclo.massaMagra, 4, 1) : "",
     visceral: ciclo.visceral != null ? String(ciclo.visceral) : "",
     d1: ciclo.unidade === "MG" ? numeroParaMascara(ciclo.doses?.[0], 3, 1) : String(ciclo.doses?.[0] ?? ""),
     d2: ciclo.unidade === "MG" ? numeroParaMascara(ciclo.doses?.[1], 3, 1) : String(ciclo.doses?.[1] ?? ""),
@@ -247,6 +248,7 @@ function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
         { label: "Data", valor: dadosValidados.data ? fmtData(dadosValidados.data) : "—" },
         { label: "Peso", valor: `${br(dadosValidados.peso)} kg` },
         { label: "% Gordura", valor: dadosValidados.gordura ? `${br(dadosValidados.gordura)}%` : "—" },
+        { label: "Massa magra", valor: dadosValidados.massaMagra ? `${br(dadosValidados.massaMagra)} kg` : "—" },
         { label: "Gordura visceral", valor: dadosValidados.visceral || "—" },
         { label: "Doses (S1-S4)", valor: dadosValidados.doses.map(d => br(d)).join(" · ") + ` ${dadosValidados.unidade?.toLowerCase()}` },
         { label: "Local", valor: dadosValidados.local },
@@ -304,10 +306,14 @@ function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
             </div>
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
             <div className="field">
               <label>% Gordura</label>
               <InputDecimal value={f.gordura} onChange={(v) => set("gordura", v)} placeholder="34,0" digitos={3} decimais={1} />
+            </div>
+            <div className="field">
+              <label>Massa magra (kg)</label>
+              <InputDecimal value={f.massaMagra} onChange={(v) => set("massaMagra", v)} placeholder="62,5" digitos={4} decimais={1} />
             </div>
             <div className="field">
               <label>Gordura visceral</label>
@@ -709,7 +715,8 @@ export default function Ficha({ pacienteId, navegar }) {
     );
   }
 
-  const serie = p.ciclos.map((c) => ({ x: c.mes, peso: c.peso, imc: imc(c.peso, p.altura), gordura: c.gordura, visceral: c.visceral }));
+  const serie = p.ciclos.map((c) => ({ x: c.mes, peso: c.peso, imc: imc(c.peso, p.altura), gordura: c.gordura, visceral: c.visceral, magra: massaMagraKg(c) }));
+  const temMagra = serie.some((s) => s.magra != null);
 
   const Resumo = ({ label, value, unit, sub }) => (
     <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
@@ -731,6 +738,15 @@ export default function Ficha({ pacienteId, navegar }) {
         <Resumo label="Peso atual" value={br(ultimoCiclo(p).peso)} unit="kg" sub={`−${br(perdaPeso(p))} kg`} />
         <Resumo label="IMC" value={br(imc(ultimoCiclo(p).peso, p.altura))} sub={`era ${br(imc(primeiroCiclo(p).peso, p.altura))}`} />
         <Resumo label="% Gordura" value={br(ultimoCiclo(p).gordura)} unit="%" sub={`−${br(+(primeiroCiclo(p).gordura - ultimoCiclo(p).gordura).toFixed(1))} p.p.`} />
+        {temMagra && (() => {
+          const mAtual = massaMagraKg(ultimoCiclo(p));
+          const mIni = massaMagraKg(primeiroCiclo(p));
+          const delta = mAtual != null && mIni != null ? +(mAtual - mIni).toFixed(1) : null;
+          return (
+            <Resumo label="Massa magra" value={mAtual != null ? br(mAtual) : "—"} unit="kg"
+              sub={delta != null ? `${delta >= 0 ? "+" : ""}${br(delta)} kg` : null} />
+          );
+        })()}
         <Resumo label="Visceral" value={ultimoCiclo(p).visceral} sub={`era ${primeiroCiclo(p).visceral}`} />
       </div>
 
@@ -739,6 +755,7 @@ export default function Ficha({ pacienteId, navegar }) {
         <LinhaChart data={serie} dataKey="peso" title="Peso" unit="kg" />
         <LinhaChart data={serie} dataKey="imc" title="IMC" unit="kg/m²" />
         <LinhaChart data={serie} dataKey="gordura" colorKey="gord" color="var(--gord)" title="% Gordura" unit="%" />
+        {temMagra && <LinhaChart data={serie} dataKey="magra" color="var(--good)" title="Massa magra" unit="kg" />}
         <LinhaChart data={serie} dataKey="visceral" color="var(--visc)" title="Visceral" unit="nível" />
       </div>
 
@@ -760,6 +777,12 @@ export default function Ficha({ pacienteId, navegar }) {
                     <Delta atual={c.peso} anterior={prev?.peso} bom="baixo" unit=" kg" />
                     {" · "}{br(c.gordura)}% gordura
                     <Delta atual={c.gordura} anterior={prev?.gordura} bom="baixo" unit="%" />
+                    {massaMagraKg(c) != null && (
+                      <>
+                        {" · "}{br(massaMagraKg(c))} kg magra
+                        <Delta atual={massaMagraKg(c)} anterior={prev ? massaMagraKg(prev) : null} bom="alto" unit=" kg" />
+                      </>
+                    )}
                   </span>
                   <span style={{ fontSize: 11.5, color: "var(--brand)", background: "var(--brandSoft)", padding: "3px 9px", borderRadius: 20, fontWeight: 600 }}>
                     {br(c.doses?.[c.doses.length - 1])} {c.unidade?.toLowerCase()} · {c.local}
@@ -792,6 +815,12 @@ export default function Ficha({ pacienteId, navegar }) {
                       ))}
                       <span style={{ fontSize: 12, color: "var(--inkSoft)", fontWeight: 600, paddingBottom: 22 }}>{c.unidade?.toLowerCase()}</span>
                     </div>
+                  </div>
+                  <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fit, minmax(120px, 1fr))", gap: 18 }}>
+                    <KV k="Peso" v={`${br(c.peso)} kg`} />
+                    <KV k="% Gordura" v={c.gordura != null ? `${br(c.gordura)}%` : "—"} />
+                    <KV k="Massa magra" v={massaMagraKg(c) != null ? `${br(massaMagraKg(c))} kg` : "—"} />
+                    <KV k="Gordura visceral" v={c.visceral != null ? c.visceral : "—"} />
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(210px, 1fr))", gap: 18 }}>
                     <KV k="Suplementação" v={c.suplementacao} />
