@@ -24,6 +24,7 @@ const CABECALHO = [
   "data_ciclo",     // AAAA-MM-DD — data do ciclo (para ordenar corretamente)
   "peso",           // obrigatório — kg
   "gordura",        // % gordura corporal (opcional)
+  "massa_magra",    // massa magra em kg (opcional)
   "visceral",       // gordura visceral (opcional)
   "unidade",        // MG | UI (opcional, default MG)
   "dose_s1",        // semana 1 (opcional)
@@ -38,11 +39,11 @@ const CABECALHO = [
 
 const EXEMPLOS = [
   // Paciente 1 — 3 meses de histórico
-  ["Maria Oliveira", "2026-03-01", 42, "Feminino", 1.64, "Emagrecimento", "Pré-diabetes", "Mar/26", "2026-03-15", 94.2, 41.0, 13, "MG", 2.5, 2.5, 2.5, 5.0, "Casa", "Vitamina D", "Náusea leve", "Adaptação inicial"],
-  ["Maria Oliveira", "2026-03-01", 42, "Feminino", 1.64, "Emagrecimento", "Pré-diabetes", "Abr/26", "2026-04-15", 90.8, 39.5, 12, "MG", 5.0, 5.0, 5.0, 5.0, "Casa", "Vitamina D", "", "Boa adesão"],
-  ["Maria Oliveira", "2026-03-01", 42, "Feminino", 1.64, "Emagrecimento", "Pré-diabetes", "Mai/26", "2026-05-15", 87.1, 37.2, 11, "MG", 5.0, 7.5, 7.5, 7.5, "Casa", "Vitamina D", "", "Perda acelerada"],
+  ["Maria Oliveira", "2026-03-01", 42, "Feminino", 1.64, "Emagrecimento", "Pré-diabetes", "Mar/26", "2026-03-15", 94.2, 41.0, 55.6, 13, "MG", 2.5, 2.5, 2.5, 5.0, "Casa", "Vitamina D", "Náusea leve", "Adaptação inicial"],
+  ["Maria Oliveira", "2026-03-01", 42, "Feminino", 1.64, "Emagrecimento", "Pré-diabetes", "Abr/26", "2026-04-15", 90.8, 39.5, 54.9, 12, "MG", 5.0, 5.0, 5.0, 5.0, "Casa", "Vitamina D", "", "Boa adesão"],
+  ["Maria Oliveira", "2026-03-01", 42, "Feminino", 1.64, "Emagrecimento", "Pré-diabetes", "Mai/26", "2026-05-15", 87.1, 37.2, 54.7, 11, "MG", 5.0, 7.5, 7.5, 7.5, "Casa", "Vitamina D", "", "Perda acelerada"],
   // Paciente 2 — 1 ciclo
-  ["João Costa",    "2026-04-01", 51, "Masculino", 1.78, "Controle glicêmico", "Diabetes tipo 2", "Mai/26", "2026-05-10", 108.5, 34.2, 17, "MG", 2.5, 2.5, 2.5, 2.5, "Clínica", "", "Constipação", "Início de protocolo"],
+  ["João Costa",    "2026-04-01", 51, "Masculino", 1.78, "Controle glicêmico", "Diabetes tipo 2", "Mai/26", "2026-05-10", 108.5, 34.2, 71.4, 17, "MG", 2.5, 2.5, 2.5, 2.5, "Clínica", "", "Constipação", "Início de protocolo"],
 ];
 
 // ─── Tela ─────────────────────────────────────────────────────
@@ -123,6 +124,7 @@ export default function Importar({ navegar }) {
           mes: String(row.mes || "").trim(),
           peso: row.peso,
           gordura: row.gordura,
+          massaMagra: row.massa_magra,
           visceral: row.visceral,
           unidade: String(row.unidade || "MG").trim().toUpperCase() || "MG",
           doses: [row.dose_s1, row.dose_s2, row.dose_s3, row.dose_s4].map(parseNum),
