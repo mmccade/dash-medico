@@ -103,6 +103,8 @@ export function validateCiclo(raw) {
   const dataR         = isoDate(raw.data);   // campo opcional DD/MM/AAAA salvo como AAAA-MM-DD
   const pesoR         = num(raw.peso, { min: 20, max: 400, required: true });
   const gorduraR      = num(raw.gordura, { min: 0, max: 100 });
+  const massaMagraR   = num(raw.massaMagra, { min: 0, max: 400 });      // kg
+  const massaMagraPctR = num(raw.massaMagraPct, { min: 0, max: 100 });  // %
   const visceralR     = int(raw.visceral, { min: 0, max: 50 });
   const unidade       = str(raw.unidade, 5);
   const local         = str(raw.local, 100);
@@ -114,6 +116,8 @@ export function validateCiclo(raw) {
   push("data", dataR.error);
   push("peso", pesoR.error);
   push("gordura", gorduraR.error);
+  push("massa magra", massaMagraR.error);
+  push("massa magra %", massaMagraPctR.error);
   push("visceral", visceralR.error);
 
   const doses = Array.isArray(raw.doses)
@@ -130,6 +134,9 @@ export function validateCiclo(raw) {
       data: dataR.value || "",
       peso: pesoR.value,
       gordura: gorduraR.value,
+      // massa magra: salva o que foi informado (kg e/ou %); 0/ausente vira null
+      massaMagra: massaMagraR.value || null,
+      massaMagraPct: massaMagraPctR.value || null,
       visceral: visceralR.value,
       unidade: unidade.value || "MG",
       doses,
