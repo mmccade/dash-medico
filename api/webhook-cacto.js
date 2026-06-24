@@ -1,25 +1,37 @@
 // api/webhook-cacto.js
-// Vercel Serverless Function — recebe webhooks da Cacto.
+// Vercel Serverless Function — recebe webhooks da Cakto.
 //
-// Responsabilidades:
-//  1. Validar a autenticidade do POST (secret compartilhado) — impede forjar requisição.
-//  2. Idempotência: a Cacto reenvia o mesmo evento; gravamos o id processado e ignoramos repetição.
-//  3. Pagamento aprovado  -> provisiona acesso (cria conta Auth se não existir, define plano,
-//     status=ativo) e dispara email de login/boas-vindas via Resend.
-//  4. Cancelamento / expiração / falha de pagamento -> status=pausado SEM apagar dados.
-//  5. Renovação -> reativa (status=ativo) e estende a validade.
+// Estrutura REAL do payload da Cakto (confirmada na doc oficial):
+//   {
+//     "payload": {                 // às vezes o corpo já é o conteúdo direto
+//       "data": {
+//         "customer": { "email": "...", "name": "...", "phone": "...", "docNumber": "..." },
+//         "offer":    { "id": "...", "name": "...", "price": 5 },
+//         "product":  { "id": "...", "name": "...", "type": "unique|subscription" },
+//         "amount": 5,
+//         "status": "paid",
+//         "subscription": null | { ... },
+//         "subscription_period": null | "monthly" | ...,
+//         "id": "b3df956e-..."      // id da transação
+//       },
+//       "event": "purchase_approved",
+//       "secret": "8402b43f-..."
+//     }
+//   }
 //
-// Variáveis de ambiente necessárias (Vercel):
+// Alguns provedores enviam o conteúdo de "payload" direto na raiz do corpo,
+// então o código abaixo aceita as duas formas (req.body.payload OU req.body).
+//
+// Variáveis de ambiente (Vercel):
 //   FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY
 //   RESEND_API_KEY
-//   CACTO_WEBHOOK_SECRET   -> segredo combinado com a Cacto (header ou campo no payload)
-//   APP_LOGIN_URL          -> ex https://app.murev.com.br/login  (default abaixo)
+//   CACTO_WEBHOOK_SECRET   -> mesmo secret configurado no painel da Cakto
+//   APP_LOGIN_URL          -> ex https://app.murev.com.br/login
 
 import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
 import { getFirestore, FieldValue } from "firebase-admin/firestore";
 import { Resend } from "resend";
-import crypto from "crypto";
 
 // ─── Firebase Admin (singleton) ──────────────────────────────
 function admin() {
@@ -35,123 +47,77 @@ function admin() {
   return { auth: getAuth(), db: getFirestore() };
 }
 
-// ─── Mapeamento valor->plano (espelha VALOR_PLANO do front) ──
-// A Cacto manda o valor pago; inferimos o plano. Ajuste os preços conforme
-// os produtos/ofertas criados no painel da Cacto.
-const PLANO_POR_OFERTA = {
-  // chave = id da oferta/produto na Cacto (preencha com os reais)
-  // "of_xxx_mensal": "mensal",
-};
-function inferirPlano(payload) {
-  // 1) tenta por id de oferta mapeado
-  const ofertaId =
-    payload?.offer?.id || payload?.product?.id || payload?.plan?.id || payload?.oferta;
-  if (ofertaId && PLANO_POR_OFERTA[ofertaId]) return PLANO_POR_OFERTA[ofertaId];
-
-  // 2) tenta por nome/ciclo da assinatura
-  const ciclo = String(
-    payload?.subscription?.interval ||
-      payload?.plan?.interval ||
-      payload?.interval ||
-      payload?.frequency ||
-      ""
-  ).toLowerCase();
-  if (ciclo.includes("year") || ciclo.includes("anual") || ciclo.includes("annual")) return "anual";
-  if (ciclo.includes("quarter") || ciclo.includes("trimes") || ciclo === "3") return "trimestral";
-  if (ciclo.includes("month") || ciclo.includes("mens") || ciclo === "1") return "mensal";
-
-  // 3) fallback por valor pago (centavos ou reais)
-  const bruto = Number(
-    payload?.amount ?? payload?.value ?? payload?.total ?? payload?.price ?? 0
-  );
-  const reais = bruto > 1000 ? bruto / 100 : bruto; // heurística centavos
-  if (reais >= 150) return "anual";
-  if (reais >= 60) return "trimestral";
-  if (reais > 0) return "mensal";
-  return "mensal";
+// ─── Normaliza o corpo recebido ──────────────────────────────
+// Aceita { payload: {...} } ou o objeto direto.
+function extrairConteudo(body) {
+  const raw = typeof body === "string" ? safeParse(body) : (body || {});
+  const p = raw.payload || raw;       // o "miolo" do evento
+  const data = p.data || p;           // os dados da venda
+  const event = p.event || raw.event || data.event || "";
+  const secret = p.secret || raw.secret || data.secret || "";
+  return { data, event, secret };
 }
 
-// Quantos dias o plano dura — usado para calcular acessoAte (validade)
-const DIAS_PLANO = { mensal: 31, trimestral: 93, anual: 366, vitalicio: 36500 };
+function safeParse(s) { try { return JSON.parse(s); } catch { return {}; } }
 
-// ─── Normalização do evento ──────────────────────────────────
-// A Cacto usa nomes de evento próprios; agrupamos em 3 ações.
-function classificarEvento(payload) {
-  const ev = String(payload?.event || payload?.type || payload?.status || "").toLowerCase();
+// ─── Classificação do evento (custom_id oficiais da Cakto) ───
+const EVENTOS_APROVA = new Set([
+  "purchase_approved",      // compra aprovada
+  "subscription_renewed",   // assinatura renovada
+]);
+const EVENTOS_PAUSA = new Set([
+  "subscription_canceled",        // assinatura cancelada
+  "subscription_renewal_refused", // renovação recusada
+  "refund",                       // reembolso
+  "chargeback",                   // chargeback
+]);
 
-  const APROVA = [
-    "purchase.approved", "order.paid", "payment.approved", "payment.confirmed",
-    "subscription.paid", "subscription.renewed", "subscription.activated",
-    "pix.approved", "approved", "paid", "active",
-  ];
-  const PAUSA = [
-    "subscription.canceled", "subscription.cancelled", "subscription.expired",
-    "subscription.suspended", "payment.refused", "payment.failed",
-    "order.refunded", "chargeback", "refunded", "canceled", "cancelled",
-    "expired", "overdue", "unpaid",
-  ];
-
-  if (APROVA.some((e) => ev.includes(e))) return "aprovar";
-  if (PAUSA.some((e) => ev.includes(e))) return "pausar";
+function classificar(event) {
+  const e = String(event || "").toLowerCase();
+  if (EVENTOS_APROVA.has(e)) return "aprovar";
+  if (EVENTOS_PAUSA.has(e)) return "pausar";
+  // fallback por texto, caso a Cakto mude algo
+  if (e.includes("approved") || e.includes("renewed")) return "aprovar";
+  if (e.includes("cancel") || e.includes("refus") || e.includes("refund") || e.includes("chargeback"))
+    return "pausar";
   return "ignorar";
 }
 
-function extrairEmail(payload) {
-  const e =
-    payload?.customer?.email ||
-    payload?.buyer?.email ||
-    payload?.client?.email ||
-    payload?.email ||
-    payload?.data?.customer?.email;
+// ─── Inferência de plano ─────────────────────────────────────
+// A Cakto manda subscription_period (ex: "monthly") e/ou o tipo do produto.
+function inferirPlano(data) {
+  const periodo = String(
+    data.subscription_period ||
+    data.subscription?.period ||
+    data.subscription?.interval ||
+    data.offer?.period ||
+    ""
+  ).toLowerCase();
+
+  if (periodo.includes("year") || periodo.includes("anual") || periodo.includes("annual")) return "anual";
+  if (periodo.includes("quarter") || periodo.includes("trimes") || periodo.includes("3")) return "trimestral";
+  if (periodo.includes("month") || periodo.includes("mens")) return "mensal";
+
+  // fallback por valor pago
+  const bruto = Number(data.amount ?? data.offer?.price ?? data.baseAmount ?? 0);
+  if (bruto >= 150) return "anual";
+  if (bruto >= 60) return "trimestral";
+  if (bruto > 0) return "mensal";
+  return "mensal";
+}
+
+const DIAS_PLANO = { mensal: 31, trimestral: 93, anual: 366, vitalicio: 36500 };
+
+// ─── Extração de campos ──────────────────────────────────────
+function extrairEmail(data) {
+  const e = data.customer?.email || data.buyer?.email || data.email;
   return e ? String(e).trim().toLowerCase() : null;
 }
-
-function extrairEventoId(payload) {
-  return (
-    payload?.id ||
-    payload?.event_id ||
-    payload?.transaction?.id ||
-    payload?.order?.id ||
-    payload?.subscription?.id ||
-    null
-  );
+function extrairNome(data) {
+  return data.customer?.name || data.buyer?.name || data.name || "";
 }
-
-// ─── Validação do secret ─────────────────────────────────────
-// Aceita o secret por header (x-cacto-signature / authorization) OU campo no corpo.
-// Se a Cacto assinar com HMAC, comparamos o hash; senão, igualdade simples do token.
-function autenticado(req, rawBody) {
-  const secret = process.env.CACTO_WEBHOOK_SECRET;
-  if (!secret) return true; // sem secret configurado, não bloqueia (mas logamos)
-
-  const assinatura =
-    req.headers["x-cacto-signature"] ||
-    req.headers["x-webhook-signature"] ||
-    req.headers["x-hub-signature-256"] ||
-    "";
-
-  // Modo HMAC (se a Cacto enviar assinatura)
-  if (assinatura && rawBody) {
-    try {
-      const esperado = crypto.createHmac("sha256", secret).update(rawBody).digest("hex");
-      const recebido = String(assinatura).replace(/^sha256=/, "");
-      if (
-        recebido.length === esperado.length &&
-        crypto.timingSafeEqual(Buffer.from(recebido), Buffer.from(esperado))
-      ) {
-        return true;
-      }
-    } catch { /* cai para verificação por token */ }
-  }
-
-  // Modo token simples (header Authorization, x-cacto-token, ou ?secret= / body.secret)
-  const token =
-    (req.headers.authorization || "").replace(/^Bearer\s+/i, "") ||
-    req.headers["x-cacto-token"] ||
-    req.query?.secret ||
-    req.body?.secret ||
-    "";
-  return token && token === secret;
+function extrairEventoId(data) {
+  return data.id || data.refId || data.subscription?.id || data.checkout || null;
 }
 
 // ─── Handler ─────────────────────────────────────────────────
@@ -160,24 +126,34 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Método não permitido." });
   }
 
-  const rawBody = typeof req.body === "string" ? req.body : JSON.stringify(req.body ?? {});
+  const { data, event, secret } = extrairConteudo(req.body);
 
-  if (!autenticado(req, rawBody)) {
-    console.warn("[webhook-cacto] assinatura/secret inválido");
-    return res.status(401).json({ error: "Não autorizado." });
+  // ── Validação do secret (vem no corpo: payload.secret) ──
+  const esperado = process.env.CACTO_WEBHOOK_SECRET;
+  if (esperado) {
+    // aceita também via header, por garantia
+    const headerSecret =
+      (req.headers["authorization"] || "").replace(/^Bearer\s+/i, "") ||
+      req.headers["x-cakto-signature"] ||
+      req.headers["x-webhook-secret"] ||
+      "";
+    const recebido = secret || headerSecret;
+    if (recebido !== esperado) {
+      console.warn("[webhook-cacto] secret inválido");
+      return res.status(401).json({ error: "Não autorizado." });
+    }
   }
 
-  const payload = typeof req.body === "string" ? safeParse(req.body) : req.body ?? {};
-  const acao = classificarEvento(payload);
-  const email = extrairEmail(payload);
-  const eventoId = extrairEventoId(payload);
+  const acao = classificar(event);
+  const email = extrairEmail(data);
+  const eventoId = extrairEventoId(data);
 
-  // Responde 200 mesmo em "ignorar" para a Cacto não ficar reenviando.
+  // responde 200 em "ignorar" pra Cakto não reenviar
   if (acao === "ignorar") {
-    return res.status(200).json({ ok: true, ignorado: true });
+    return res.status(200).json({ ok: true, ignorado: true, event });
   }
   if (!email) {
-    console.warn("[webhook-cacto] payload sem email", { eventoId, acao });
+    console.warn("[webhook-cacto] payload sem email", { event, acao });
     return res.status(200).json({ ok: true, semEmail: true });
   }
 
@@ -185,57 +161,44 @@ export default async function handler(req, res) {
     const { auth, db } = admin();
 
     // ── Idempotência ──
-    // Grava o evento numa coleção; se já existir, ignora.
     if (eventoId) {
-      const evRef = db.collection("cacto_eventos").doc(String(eventoId));
+      const evRef = db.collection("cacto_eventos").doc(String(eventoId) + "_" + event);
       const ja = await evRef.get();
       if (ja.exists) {
         return res.status(200).json({ ok: true, duplicado: true });
       }
       await evRef.set({
-        email, acao, recebidoEm: FieldValue.serverTimestamp(),
-        evento: payload?.event || payload?.type || payload?.status || null,
+        email, acao, event,
+        recebidoEm: FieldValue.serverTimestamp(),
       });
     }
 
     if (acao === "aprovar") {
-      await aprovar({ auth, db, email, payload });
+      await aprovar({ auth, db, email, data });
     } else if (acao === "pausar") {
-      await pausar({ db, email, payload });
+      await pausar({ db, email, event });
     }
 
     return res.status(200).json({ ok: true });
   } catch (e) {
     console.error("[webhook-cacto] erro:", e);
-    // 500 faz a Cacto reenviar — bom para falhas transitórias.
     return res.status(500).json({ error: "Falha ao processar webhook." });
   }
 }
 
-function safeParse(s) {
-  try { return JSON.parse(s); } catch { return {}; }
-}
-
-// ─── Ação: aprovar pagamento ─────────────────────────────────
-async function aprovar({ auth, db, email, payload }) {
-  const plano = inferirPlano(payload);
+// ─── Ação: aprovar ───────────────────────────────────────────
+async function aprovar({ auth, db, email, data }) {
+  const plano = inferirPlano(data);
   const dias = DIAS_PLANO[plano] || 31;
   const acessoAte = new Date(Date.now() + dias * 24 * 60 * 60 * 1000);
 
-  // 1) Garante a conta no Firebase Auth
   let userRecord;
-  let senhaTemporaria = null;
   let contaNova = false;
   try {
     userRecord = await auth.getUserByEmail(email);
   } catch (e) {
     if (e.code === "auth/user-not-found") {
-      senhaTemporaria = gerarSenha();
-      userRecord = await auth.createUser({
-        email,
-        password: senhaTemporaria,
-        emailVerified: false,
-      });
+      userRecord = await auth.createUser({ email, emailVerified: false });
       contaNova = true;
     } else {
       throw e;
@@ -246,7 +209,6 @@ async function aprovar({ auth, db, email, payload }) {
   const ref = db.collection("usuarios").doc(uid);
   const snap = await ref.get();
 
-  // 2) Cria/atualiza o documento de perfil — preserva dados existentes
   const base = {
     email,
     plano,
@@ -257,16 +219,15 @@ async function aprovar({ auth, db, email, payload }) {
     pausadoEm: null,
     motivoPausa: null,
     atualizadoViaWebhook: FieldValue.serverTimestamp(),
-    cactoCustomerId:
-      payload?.customer?.id || payload?.buyer?.id || payload?.subscription?.id || null,
+    cactoCustomerId: data.customer?.docNumber || data.subscription?.id || null,
   };
 
   if (!snap.exists) {
     await ref.set({
       ...base,
-      nome: payload?.customer?.name || payload?.buyer?.name || "",
+      nome: extrairNome(data),
       clinica: "Minha Clínica",
-      medico: payload?.customer?.name || "",
+      medico: extrairNome(data),
       crm: "",
       criadoEm: FieldValue.serverTimestamp(),
       origem: "cacto",
@@ -276,48 +237,35 @@ async function aprovar({ auth, db, email, payload }) {
     await ref.update(base);
   }
 
-  // 3) Email
-  const nome = payload?.customer?.name || payload?.buyer?.name || "";
-  if (contaNova && senhaTemporaria) {
-    // Conta nova: manda link de definição de senha (não a senha em texto puro).
+  const nome = extrairNome(data);
+  if (contaNova) {
     const link = await auth.generatePasswordResetLink(email, {
       url: process.env.APP_LOGIN_URL || "https://app.murev.com.br/login",
     });
     await enviarBoasVindas(email, nome, plano, link);
   } else {
-    // Conta já existia (renovação ou reativação): email simples de confirmação.
     await enviarRenovacao(email, nome, plano);
   }
 }
 
-// ─── Ação: pausar acesso ─────────────────────────────────────
-async function pausar({ db, email, payload }) {
-  // Encontra o usuário pelo email (sem deletar nada).
+// ─── Ação: pausar ────────────────────────────────────────────
+async function pausar({ db, email, event }) {
   const q = await db.collection("usuarios").where("email", "==", email).limit(1).get();
   if (q.empty) {
     console.warn("[webhook-cacto] pausar: usuário não encontrado", email);
     return;
   }
-  const ref = q.docs[0].ref;
-  await ref.update({
+  await q.docs[0].ref.update({
     status: "pausado",
     statusAssinatura: "cancelado",
     pausadoEm: FieldValue.serverTimestamp(),
-    motivoPausa: payload?.event || payload?.type || payload?.status || "assinatura encerrada",
+    motivoPausa: event || "assinatura encerrada",
     atualizadoViaWebhook: FieldValue.serverTimestamp(),
-    // plano é mantido para referência; o gate de acesso olha "status".
   });
 }
 
-// ─── Helpers ─────────────────────────────────────────────────
-function gerarSenha() {
-  // Senha temporária forte (o usuário troca pelo link de reset).
-  return crypto.randomBytes(9).toString("base64").replace(/[^a-zA-Z0-9]/g, "") + "A1";
-}
-
-const LABEL_PLANO = {
-  mensal: "Mensal", trimestral: "Trimestral", anual: "Anual", vitalicio: "Vitalício",
-};
+// ─── E-mails ─────────────────────────────────────────────────
+const LABEL_PLANO = { mensal: "Mensal", trimestral: "Trimestral", anual: "Anual", vitalicio: "Vitalício" };
 
 async function enviarBoasVindas(email, nome, plano, link) {
   const resend = new Resend(process.env.RESEND_API_KEY);
@@ -352,9 +300,7 @@ async function enviarRenovacao(email, nome, plano) {
   });
 }
 
-function primeiroNome(nome) {
-  return String(nome).trim().split(/\s+/)[0];
-}
+function primeiroNome(nome) { return String(nome).trim().split(/\s+/)[0]; }
 
 function emailHtml({ titulo, saudacao, corpo, ctaTexto, ctaLink, rodapeExtra }) {
   return `<!DOCTYPE html>
