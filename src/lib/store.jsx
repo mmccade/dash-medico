@@ -3,6 +3,7 @@
 
 import { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { PACIENTES_DEMO, CONFIG_INICIAL } from "./dados.js";
+import { massaMagraKg } from "./utils.js";
 import { useAuth } from "./auth.jsx";
 import * as dbApi from "../services/db.js";
 
@@ -153,18 +154,18 @@ export function StoreProvider({ children }) {
   const exportarCSV = useCallback(() => {
     const linhas = [];
     const cab = ["Nome", "Idade", "Sexo", "Altura(m)", "Inicio", "Objetivo", "Condicoes", "Ativo",
-      "Mes", "Peso(kg)", "Gordura(%)", "Visceral", "Unidade", "Dose_S1", "Dose_S2", "Dose_S3", "Dose_S4",
+      "Mes", "Peso(kg)", "Gordura(%)", "MassaMagra(kg)", "Visceral", "Unidade", "Dose_S1", "Dose_S2", "Dose_S3", "Dose_S4",
       "Local", "Suplementacao", "Colaterais", "Obs"];
     linhas.push(cab.join(";"));
     pacientes.forEach((p) => {
       if (p.ciclos.length === 0) {
         linhas.push([p.nome, p.idade, p.sexo, p.altura, p.inicio, p.objetivo, p.comorbidades, p.ativo ? "sim" : "não",
-          "", "", "", "", "", "", "", "", "", "", "", "", ""].join(";"));
+          "", "", "", "", "", "", "", "", "", "", "", "", "", ""].join(";"));
       } else {
         p.ciclos.forEach((c) => {
           linhas.push([
             p.nome, p.idade, p.sexo, p.altura, p.inicio, p.objetivo, p.comorbidades, p.ativo ? "sim" : "não",
-            c.mes, c.peso, c.gordura, c.visceral, c.unidade,
+            c.mes, c.peso, c.gordura, (massaMagraKg(c) ?? ""), c.visceral, c.unidade,
             c.doses?.[0] ?? "", c.doses?.[1] ?? "", c.doses?.[2] ?? "", c.doses?.[3] ?? "",
             c.local, c.suplementacao, c.colaterais, c.obs,
           ].map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(";"));
