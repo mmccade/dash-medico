@@ -39,14 +39,14 @@ export default async function handler(req, res) {
 
     // 1. Gera o link de redefinição via Firebase Admin
     const link = await adminAuth.generatePasswordResetLink(email.trim().toLowerCase(), {
-      url: process.env.RESET_REDIRECT_URL || "https://dash-medico.vercel.app/login",
+      url: process.env.RESET_REDIRECT_URL || "https://app.murev.com.br/login",
     });
 
     // 2. Dispara o email pelo Resend
     const resend = new Resend(process.env.RESEND_API_KEY);
 
     await resend.emails.send({
-      from: "Murev Acompanha <noreply@murev.com.br>",
+      from: "Murev Acompanha <noreply@app.murev.com.br>",
       to: email.trim(),
       subject: "Redefinição de senha — Murev Acompanha",
       html: htmlEmail(link),
