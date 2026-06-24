@@ -6,7 +6,7 @@ import { useState } from "react";
 import { FileDown, Filter, ArrowLeft } from "lucide-react";
 import { useStore } from "../lib/store.jsx";
 import { useToast } from "../lib/toast.jsx";
-import { imc, br } from "../lib/utils.js";
+import { imc, br, massaMagraKg } from "../lib/utils.js";
 import { LinhaChart } from "../components/charts.jsx";
 import { useIsMobile } from "../components/Shell.jsx";
 import { baixarPdfEvolucao, textoResumo } from "../services/pdf.js";
@@ -86,7 +86,7 @@ export default function Evolucao({ pacienteIdInicial }) {
 
   const serie = ciclos.map((c) => ({
     x: c.mes, peso: c.peso, imc: imc(c.peso, p.altura),
-    gordura: c.gordura, visceral: c.visceral,
+    gordura: c.gordura, visceral: c.visceral, magra: massaMagraKg(c),
   }));
   const serieFiltrada = serie.slice(ia, ib + 1);
 
@@ -176,6 +176,9 @@ export default function Evolucao({ pacienteIdInicial }) {
             {fInicial.visceral != null && uFinal.visceral != null && (
               <div className="card" style={{ padding: "18px 20px" }}><Stat label="Gordura visceral" v1={fInicial.visceral} v2={uFinal.visceral} unit="" bom="baixo" /></div>
             )}
+            {massaMagraKg(fInicial) != null && massaMagraKg(uFinal) != null && (
+              <div className="card" style={{ padding: "18px 20px" }}><Stat label="Massa magra" v1={massaMagraKg(fInicial)} v2={massaMagraKg(uFinal)} unit=" kg" bom="alto" /></div>
+            )}
           </div>
 
           <div className="card" style={{ padding: "16px 20px", marginBottom: 20, fontSize: 14, lineHeight: 1.7, color: "var(--inkSoft)" }}>
@@ -201,6 +204,12 @@ export default function Evolucao({ pacienteIdInicial }) {
               <div className="card" style={{ padding: "18px 16px" }}>
                 <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--inkFaint)", marginBottom: 10 }}>Gordura visceral</div>
                 <LinhaChart data={serieFiltrada} dataKey="visceral" color="var(--visc)" title="Visceral" />
+              </div>
+            )}
+            {serieFiltrada.some((s) => s.magra != null) && (
+              <div className="card" style={{ padding: "18px 16px" }}>
+                <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--inkFaint)", marginBottom: 10 }}>Massa magra (kg)</div>
+                <LinhaChart data={serieFiltrada} dataKey="magra" color="var(--good)" title="Massa magra" />
               </div>
             )}
           </div>
