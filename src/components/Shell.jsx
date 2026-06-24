@@ -89,6 +89,9 @@ export default function Shell({ tela, navegar, onLogout, children }) {
               <button className="btn btn-ghost sm" onClick={alternar} style={{ padding: 8 }}>
                 {tema === "escuro" ? <Sun size={16} /> : <Moon size={16} />}
               </button>
+              <button className="btn btn-ghost sm" onClick={onLogout} style={{ padding: 8, color: "var(--inkFaint)" }} title="Sair da conta">
+                <LogOut size={16} />
+              </button>
             </div>
           </div>
           <nav style={{ display: "flex", gap: 4, overflowX: "auto" }}>
