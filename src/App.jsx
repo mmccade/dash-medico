@@ -17,6 +17,7 @@ import NovoPaciente from "./screens/NovoPaciente.jsx";
 import Importar from "./screens/Importar.jsx";
 import Config from "./screens/Config.jsx";
 import MeuPerfil from "./screens/MeuPerfil.jsx";
+import ContaPausada from "./screens/ContaPausada.jsx";
 import Sobre from "./screens/Sobre.jsx";
 import Alertas from "./screens/Alertas.jsx";
 import Relatorio from "./screens/Relatorio.jsx";
@@ -65,6 +66,10 @@ export default function App() {
   if (carregando) return <TelaCarregando />;
   if (!user) return <Login />;
   if (isAdmin) return <Admin />;
+
+  // Assinatura pausada (cancelamento/expiração via webhook Cacto):
+  // bloqueia o acesso SEM apagar dados. Admin nunca é pausado (return acima).
+  if (perfil?.status === "pausado") return <ContaPausada />;
 
   const semPlano = perfil && (!perfil.plano || perfil.plano === "nenhum");
 
