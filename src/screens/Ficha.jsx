@@ -6,7 +6,7 @@
 // + PDF de meta batida disponível quando bater
 
 import { useState, useEffect } from "react";
-import { ArrowLeft, Stethoscope, FileText, ChevronDown, Pencil, Trash2, X, Loader2, Check, Trophy } from "lucide-react";
+import { ArrowLeft, Trash2, Stethoscope, FileText, ChevronDown, Pencil, X, Loader2, Check, Trophy } from "lucide-react";
 import { useStore } from "../lib/store.jsx";
 import { useToast } from "../lib/toast.jsx";
 import { imc, br, fmtData, primeiroCiclo, ultimoCiclo, perdaPeso, mesesTrat, parseNum, imcMeta, metaPesoBatida, metaVisceralBatida, massaMagraKg } from "../lib/utils.js";
@@ -540,7 +540,7 @@ function Delta({ atual, anterior, bom = "baixo", unit = "" }) {
 
 // ─── Tela principal ───────────────────────────────────────────
 export default function Ficha({ pacienteId, navegar }) {
-  const { getPaciente, config, editarCiclo, excluirCiclo, editarPaciente, toggleAtivo, desativarPaciente } = useStore();
+  const { getPaciente, config, editarCiclo, excluirCiclo, editarPaciente, toggleAtivo, desativarPaciente, moverParaLixeira } = useStore();
   const toast = useToast();
   const isMobile = useIsMobile();
   const p = getPaciente(pacienteId);
@@ -591,6 +591,12 @@ export default function Ficha({ pacienteId, navegar }) {
     await desativarPaciente(p.id, motivo, detalhes);
     toast("Paciente desativado");
     setAnimarSaindo(false);
+  };
+
+  const handleMoverLixeira = async () => {
+    if (!window.confirm(`Mover ${p.nome} para a lixeira? Você pode restaurá-lo por 30 dias em Pacientes > Lixeira.`)) return;
+    await moverParaLixeira(p.id);
+    navegar("pacientes");
   };
 
   const baixarPdfMeta = async (paciente, mensagem) => {
@@ -653,6 +659,9 @@ export default function Ficha({ pacienteId, navegar }) {
               <Trophy size={15} /> Baixar PDF de meta batida
             </button>
           )}
+          <button className="btn btn-ghost" onClick={handleMoverLixeira} style={{ flex: isMobile ? 1 : "none", color: "var(--inkFaint)" }}>
+            <Trash2 size={15} /> Lixeira
+          </button>
           <button className="btn btn-ghost" style={{ flex: isMobile ? 1 : "none" }} onClick={() => navegar("novociclo", p.id)}>
             <Stethoscope size={16} /> Novo ciclo
           </button>
