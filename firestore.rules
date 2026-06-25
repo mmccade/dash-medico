@@ -1,57 +1,39 @@
 rules_version = '2';
-// ============================================================
-// SECURITY RULES — Murev Acompanha
-// Alteração: admin agora pode LER pacientes (só leitura) para mostrar
-// contagem no painel administrativo. Escrita continua só do dono.
-// ============================================================
 service cloud.firestore {
   match /databases/{database}/documents {
-
     function isAdmin() {
       return request.auth != null
         && request.auth.token.email == 'souzasoaresgabrie9@gmail.com';
     }
-
     function isDono(uid) {
       return request.auth != null && request.auth.uid == uid;
     }
-
-    // Conta ativa = não está pausada pelo webhook de assinatura.
-    // (campo gravado pelo Admin SDK; ausência de "status" é tratada como ativa
-    //  para compatibilidade com contas antigas.)
-    function contaAtiva() {
-      return !('status' in resource.data) || resource.data.status != 'pausado';
-    }
-
-    // Campos controlados EXCLUSIVAMENTE pelo backend (webhook Cacto) ou admin.
-    // O dono comum não pode alterá-los — senão um usuário pausado se reativaria
-    // sozinho mudando status para "ativo".
     function naoMexeEmCamposDeAssinatura() {
       return !request.resource.data.diff(resource.data).affectedKeys()
         .hasAny(['status', 'statusAssinatura', 'plano', 'acessoAte',
                  'planoDesde', 'pausadoEm', 'motivoPausa', 'cactoCustomerId',
                  'excluido', 'origem']);
     }
-
-    // Perfil do usuário: usuarios/{uid}
+    function donoAtivo(database, uid) {
+      return isDono(uid)
+        && (
+          !exists(/databases/$(database)/documents/usuarios/$(uid))
+          || !('status' in get(/databases/$(database)/documents/usuarios/$(uid)).data)
+          || get(/databases/$(database)/documents/usuarios/$(uid)).data.status != 'pausado'
+        );
+    }
     match /usuarios/{uid} {
       allow read:   if isDono(uid) || isAdmin();
       allow create: if isDono(uid) || isAdmin();
-      // Dono atualiza só dados de clínica/perfil; campos de assinatura ficam de fora.
       allow update: if isAdmin()
                     || (isDono(uid) && naoMexeEmCamposDeAssinatura());
       allow delete: if false;
 
-      // Pacientes — dono lê e escreve enquanto a conta estiver ativa; admin SÓ lê.
       match /pacientes/{pid} {
         allow read:  if isDono(uid) || isAdmin();
-        allow write: if isDono(uid)
-                     && (!exists(/databases/$(database)/documents/usuarios/$(uid))
-                         || get(/databases/$(database)/documents/usuarios/$(uid)).data.status != 'pausado');
+        allow write: if donoAtivo(database, uid);
       }
     }
-
-    // Audit log
     match /audit_logs/{logId} {
       allow create: if isAdmin();
       allow read:   if false;
