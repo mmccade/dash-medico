@@ -71,6 +71,12 @@ export default function App() {
   // bloqueia o acesso SEM apagar dados. Admin nunca é pausado (return acima).
   if (perfil?.status === "pausado") return <ContaPausada />;
 
+  // Acesso expirado por prazo (acessoAte no passado)
+  if (perfil?.acessoAte && perfil.plano !== "vitalicio") {
+    const ate = perfil.acessoAte?.toDate ? perfil.acessoAte.toDate() : new Date(perfil.acessoAte);
+    if (ate < new Date()) return <ContaPausada />;
+  }
+
   const semPlano = perfil && (!perfil.plano || perfil.plano === "nenhum");
 
   return (
