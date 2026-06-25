@@ -117,11 +117,10 @@ export async function removerPaciente(uid, pacienteId) {
 }
 
 // ─── Admin ────────────────────────────────────────────────────
-export async function listarTodosUsuarios(incluirExcluidos = false) {
+export async function listarTodosUsuarios() {
   const snap = await getDocs(collection(db, "usuarios"));
   return snap.docs
     .map((d) => ({ id: d.id, ...d.data() }))
-    .filter((u) => incluirExcluidos || !u.excluido)
     .sort((a, b) => {
       const ta = a.criadoEm?.toMillis?.() ?? 0;
       const tb = b.criadoEm?.toMillis?.() ?? 0;
@@ -175,4 +174,10 @@ export async function restaurarUsuario(uid, adminUid) {
     excluido: false, excluidoEm: null, excluidoPor: null,
   });
   await auditLog(adminUid, "restaurar_usuario", uid);
+}
+
+// Exclui permanentemente o doc do Firestore (Auth deve ser removido manualmente no console)
+export async function excluirPermanente(uid, adminUid) {
+  await auditLog(adminUid, "excluir_permanente", uid);
+  await deleteDoc(doc(db, "usuarios", uid));
 }
