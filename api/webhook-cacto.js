@@ -274,6 +274,7 @@ async function aprovar({ auth, db, email, data }) {
     motivoPausa: null,
     atualizadoViaWebhook: FieldValue.serverTimestamp(),
     cactoCustomerId: data.customer?.docNumber || data.subscription?.id || null,
+    paymentMethod: data.paymentMethod || data.subscription?.paymentMethod || null,
   };
 
   if (!snap.exists) {
