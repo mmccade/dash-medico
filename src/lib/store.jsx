@@ -1,6 +1,4 @@
 // src/lib/store.jsx
-// + desativarPaciente(id, motivo, detalhes) — desativa com registro de motivo
-
 import { createContext, useContext, useState, useCallback, useEffect } from "react";
 import { PACIENTES_DEMO, CONFIG_INICIAL } from "./dados.js";
 import { massaMagraKg } from "./utils.js";
@@ -8,6 +6,8 @@ import { useAuth } from "./auth.jsx";
 import * as dbApi from "../services/db.js";
 
 const StoreCtx = createContext(null);
+
+const DIAS_LIXEIRA = 30;
 
 export function StoreProvider({ children }) {
   const { user, perfil, setPerfil, firebaseAtivo } = useAuth();
@@ -23,7 +23,22 @@ export function StoreProvider({ children }) {
     let vivo = true;
     setCarregando(true);
     dbApi.listarPacientes(user.uid)
-      .then((ps) => { if (vivo) setPacientes(ps); })
+      .then((ps) => {
+        if (!vivo) return;
+        // Auto-excluir pacientes na lixeira há mais de 30 dias
+        const agora = Date.now();
+        const paraExcluir = ps.filter((p) => {
+          if (!p.excluidoEm) return false;
+          const d = new Date(p.excluidoEm).getTime();
+          return (agora - d) > DIAS_LIXEIRA * 24 * 60 * 60 * 1000;
+        });
+        if (paraExcluir.length > 0) {
+          Promise.all(paraExcluir.map((p) => dbApi.removerPaciente(user.uid, p.id)))
+            .catch((e) => console.warn("[lixeira] auto-exclusão falhou:", e));
+          ps = ps.filter((p) => !paraExcluir.find((x) => x.id === p.id));
+        }
+        setPacientes(ps);
+      })
       .catch((e) => console.error("Erro ao listar pacientes:", e))
       .finally(() => { if (vivo) setCarregando(false); });
     return () => { vivo = false; };
@@ -32,12 +47,12 @@ export function StoreProvider({ children }) {
   useEffect(() => {
     if (usandoFirebase && perfil) {
       setConfig({
-        clinica: perfil.clinica || "Minha Clínica",
-        medico: perfil.medico || "",
-        crm: perfil.crm || "",
-        logo: perfil.logo || null,
+        clinica:    perfil.clinica    || "Minha Clínica",
+        medico:     perfil.medico     || "",
+        crm:        perfil.crm        || "",
+        logo:       perfil.logo       || null,
         murevNoPdf: perfil.murevNoPdf !== false,
-        pesoMeta: perfil.pesoMeta || null,
+        pesoMeta:   perfil.pesoMeta   || null,
       });
     }
   }, [usandoFirebase, perfil]);
@@ -101,7 +116,6 @@ export function StoreProvider({ children }) {
     setPacientes((ps) => ps.map((x) => (x.id === pacienteId ? { ...x, ...dados } : x)));
   }, [usandoFirebase, user]);
 
-  // Ativa/desativa simples (sem motivo) — mantido pra retrocompatibilidade
   const toggleAtivo = useCallback(async (pacienteId) => {
     const p = pacientes.find((x) => x.id === pacienteId);
     if (!p) return;
@@ -113,8 +127,6 @@ export function StoreProvider({ children }) {
     setPacientes((ps) => ps.map((x) => (x.id === pacienteId ? { ...x, ...patch } : x)));
   }, [usandoFirebase, user, pacientes]);
 
-  // ✅ NOVO — desativar com motivo
-  // motivo: "meta_batida" | "sumiu" | "outros" | "nao_informar"
   const desativarPaciente = useCallback(async (pacienteId, motivo, detalhes = "") => {
     const patch = {
       ativo: false,
@@ -126,7 +138,6 @@ export function StoreProvider({ children }) {
     setPacientes((ps) => ps.map((x) => (x.id === pacienteId ? { ...x, ...patch } : x)));
   }, [usandoFirebase, user]);
 
-  // ✅ NOVO — ações em massa
   const ativarEmMassa = useCallback(async (ids) => {
     const patch = { ativo: true, desativadoEm: null, motivoDesativacao: null, detalhesDesativacao: null };
     if (usandoFirebase) await Promise.all(ids.map((id) => dbApi.atualizarPaciente(user.uid, id, patch)));
@@ -134,13 +145,30 @@ export function StoreProvider({ children }) {
   }, [usandoFirebase, user]);
 
   const desativarEmMassa = useCallback(async (ids, motivo = "nao_informar") => {
-    const patch = {
-      ativo: false,
-      desativadoEm: new Date().toISOString(),
-      motivoDesativacao: motivo,
-    };
+    const patch = { ativo: false, desativadoEm: new Date().toISOString(), motivoDesativacao: motivo };
     if (usandoFirebase) await Promise.all(ids.map((id) => dbApi.atualizarPaciente(user.uid, id, patch)));
     setPacientes((ps) => ps.map((x) => (ids.includes(x.id) ? { ...x, ...patch } : x)));
+  }, [usandoFirebase, user]);
+
+  // ── Lixeira ──────────────────────────────────────────────────
+  // Move para lixeira: soft delete com excluidoEm timestamp
+  const moverParaLixeira = useCallback(async (pacienteId) => {
+    const patch = { excluidoEm: new Date().toISOString() };
+    if (usandoFirebase) await dbApi.atualizarPaciente(user.uid, pacienteId, patch);
+    setPacientes((ps) => ps.map((x) => (x.id === pacienteId ? { ...x, ...patch } : x)));
+  }, [usandoFirebase, user]);
+
+  // Restaura da lixeira
+  const restaurarDaLixeira = useCallback(async (pacienteId) => {
+    const patch = { excluidoEm: null };
+    if (usandoFirebase) await dbApi.atualizarPaciente(user.uid, pacienteId, patch);
+    setPacientes((ps) => ps.map((x) => (x.id === pacienteId ? { ...x, ...patch } : x)));
+  }, [usandoFirebase, user]);
+
+  // Exclusão permanente do Firestore
+  const excluirPermanente = useCallback(async (pacienteId) => {
+    if (usandoFirebase) await dbApi.removerPaciente(user.uid, pacienteId);
+    setPacientes((ps) => ps.filter((x) => x.id !== pacienteId));
   }, [usandoFirebase, user]);
 
   const salvarConfig = useCallback(async (nova) => {
@@ -153,29 +181,29 @@ export function StoreProvider({ children }) {
 
   const exportarCSV = useCallback(() => {
     const linhas = [];
-    const cab = ["Nome", "Idade", "Sexo", "Altura(m)", "Inicio", "Objetivo", "Condicoes", "Ativo",
-      "Mes", "Peso(kg)", "Gordura(%)", "MassaMagra(kg)", "Visceral", "Unidade", "Dose_S1", "Dose_S2", "Dose_S3", "Dose_S4",
-      "Local", "Suplementacao", "Colaterais", "Obs"];
+    const cab = ["Nome","Idade","Sexo","Altura(m)","Inicio","Objetivo","Condicoes","Ativo",
+      "Mes","Peso(kg)","Gordura(%)","MassaMagra(kg)","Visceral","Unidade","Dose_S1","Dose_S2","Dose_S3","Dose_S4",
+      "Local","Suplementacao","Colaterais","Obs"];
     linhas.push(cab.join(";"));
-    pacientes.forEach((p) => {
+    pacientes.filter((p) => !p.excluidoEm).forEach((p) => {
       if (p.ciclos.length === 0) {
-        linhas.push([p.nome, p.idade, p.sexo, p.altura, p.inicio, p.objetivo, p.comorbidades, p.ativo ? "sim" : "não",
-          "", "", "", "", "", "", "", "", "", "", "", "", "", ""].join(";"));
+        linhas.push([p.nome,p.idade,p.sexo,p.altura,p.inicio,p.objetivo,p.comorbidades,p.ativo?"sim":"não",
+          "","","","","","","","","","","","","",""].join(";"));
       } else {
         p.ciclos.forEach((c) => {
           linhas.push([
-            p.nome, p.idade, p.sexo, p.altura, p.inicio, p.objetivo, p.comorbidades, p.ativo ? "sim" : "não",
-            c.mes, c.peso, c.gordura, (massaMagraKg(c) ?? ""), c.visceral, c.unidade,
-            c.doses?.[0] ?? "", c.doses?.[1] ?? "", c.doses?.[2] ?? "", c.doses?.[3] ?? "",
-            c.local, c.suplementacao, c.colaterais, c.obs,
-          ].map((v) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(";"));
+            p.nome,p.idade,p.sexo,p.altura,p.inicio,p.objetivo,p.comorbidades,p.ativo?"sim":"não",
+            c.mes,c.peso,c.gordura,(massaMagraKg(c)??""),c.visceral,c.unidade,
+            c.doses?.[0]??"",c.doses?.[1]??"",c.doses?.[2]??"",c.doses?.[3]??"",
+            c.local,c.suplementacao,c.colaterais,c.obs,
+          ].map((v) => `"${String(v??"").replace(/"/g,'""')}"`).join(";"));
         });
       }
     });
     const blob = new Blob(["\uFEFF" + linhas.join("\n")], { type: "text/csv;charset=utf-8;" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `pacientes_murev_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `pacientes_murev_${new Date().toISOString().slice(0,10)}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
   }, [pacientes]);
@@ -186,6 +214,7 @@ export function StoreProvider({ children }) {
       getPaciente, addPaciente, addPacientesEmLote, addCiclo,
       editarCiclo, excluirCiclo, editarPaciente,
       toggleAtivo, desativarPaciente, ativarEmMassa, desativarEmMassa,
+      moverParaLixeira, restaurarDaLixeira, excluirPermanente,
       salvarConfig, exportarCSV,
     }}>
       {children}
