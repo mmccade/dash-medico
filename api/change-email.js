@@ -1,6 +1,5 @@
 // api/change-email.js
 // Envia email de confirmação de troca via Resend (igual ao reset-password)
-// O Firebase manda o link de verificação pro novo email — só troca após confirmação.
 
 import { initializeApp, getApps, cert } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
@@ -22,24 +21,51 @@ function getAdminAuth() {
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Método não permitido." });
 
-  const { emailAtual, emailNovo } = req.body ?? {};
+  const emailAtualRaw = req.body?.emailAtual ?? "";
+  const emailNovoRaw  = req.body?.emailNovo  ?? "";
+
+  const emailAtual = emailAtualRaw.trim().toLowerCase();
+  const emailNovo  = emailNovoRaw.trim().toLowerCase();
 
   if (!emailAtual || !emailNovo) return res.status(400).json({ error: "Dados incompletos." });
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailNovo)) return res.status(400).json({ error: "Novo email inválido." });
-  if (emailAtual.toLowerCase() === emailNovo.toLowerCase()) return res.status(400).json({ error: "O novo email é igual ao atual." });
+  if (emailAtual === emailNovo) return res.status(400).json({ error: "O novo email é igual ao atual." });
 
   try {
     const adminAuth = getAdminAuth();
 
-    // Verifica se o usuário atual existe
-    await adminAuth.getUserByEmail(emailAtual);
+    // Verifica se o usuário atual existe (case-insensitive)
+    let usuario;
+    try {
+      usuario = await adminAuth.getUserByEmail(emailAtual);
+    } catch (e) {
+      if (e.code === "auth/user-not-found") {
+        console.warn("[change-email] usuário não encontrado:", emailAtual);
+        return res.status(404).json({ error: "Usuário atual não encontrado. Tente fazer login novamente." });
+      }
+      throw e;
+    }
 
-    // Gera link de verificação para o NOVO email (Firebase envia por padrão pelo proprio serviço,
-    // mas aqui pegamos o link e mandamos via Resend)
+    // Confirma que o novo email não está em uso por OUTRO usuário
+    try {
+      const usuarioNovo = await adminAuth.getUserByEmail(emailNovo);
+      if (usuarioNovo.uid !== usuario.uid) {
+        return res.status(400).json({ error: "Este email já está em uso por outra conta." });
+      }
+    } catch (e) {
+      if (e.code !== "auth/user-not-found") throw e;
+      // user-not-found é o caso esperado e bom: o novo email está livre
+    }
+
+    // Atualiza o email do usuário no Firebase Auth (sem verificação automática do Firebase)
+    await adminAuth.updateUser(usuario.uid, { email: emailNovo, emailVerified: false });
+
+    // Gera link de verificação para o NOVO email
     const link = await adminAuth.generateEmailVerificationLink(emailNovo, {
       url: process.env.APP_LOGIN_URL || "https://app.murev.com.br/login",
     });
 
+    // Envia pelo Resend
     const resend = new Resend(process.env.RESEND_API_KEY);
     await resend.emails.send({
       from: "Murev Acompanha <noreply@app.murev.com.br>",
@@ -51,8 +77,8 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true });
   } catch (e) {
     console.error("[change-email] erro:", e);
-    if (e.code === "auth/user-not-found") return res.status(200).json({ ok: true }); // não revelar
     if (e.code === "auth/email-already-exists") return res.status(400).json({ error: "Este email já está em uso por outra conta." });
+    if (e.code === "auth/invalid-email") return res.status(400).json({ error: "Email inválido." });
     return res.status(500).json({ error: "Não foi possível enviar o email. Tente novamente." });
   }
 }
@@ -77,7 +103,7 @@ function htmlEmail(link, novoEmail) {
     ${novoEmail}
   </p>
   <p style="font-size:14px;color:#5a6663;line-height:1.6;margin:0 0 24px;">
-    Clique no botão abaixo para confirmar. O email só será atualizado após a confirmação.
+    Clique no botão abaixo para confirmar o novo endereço.
   </p>
   <table cellpadding="0" cellspacing="0" style="margin:0 0 28px;"><tr><td style="background:#0d7a82;border-radius:10px;">
     <a href="${link}" style="display:inline-block;padding:14px 28px;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:10px;">
@@ -85,7 +111,7 @@ function htmlEmail(link, novoEmail) {
     </a>
   </td></tr></table>
   <p style="font-size:13px;color:#8a9693;line-height:1.6;margin:0;">
-    Se você não solicitou esta troca, ignore este email. Seu email atual permanece ativo.
+    Se você não solicitou esta troca, entre em contato com o suporte da Murev imediatamente.
   </p>
 </td></tr>
 <tr><td style="padding:20px 32px;border-top:1px solid #e8eeec;">
