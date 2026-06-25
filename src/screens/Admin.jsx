@@ -1,78 +1,74 @@
 // src/screens/Admin.jsx
-// Correção do bug: conta criada no Auth mas não aparecia no painel.
-// Causa: o signOut do app secundário acontecia ANTES do setDoc, e como o setDoc
-//        roda no db principal (autenticado como admin), em race condition o
-//        Firebase descartava o token. Resultado: PERMISSION_DENIED silencioso.
-// Fix:
-//  1. Cria conta no app secundário
-//  2. setDoc no Firestore do secundário (autenticado como o próprio usuário recém-criado = isDono)
-//  3. Só ENTÃO desloga e mata o app secundário
-//  4. Logs claros em caso de erro
-
 import { useState, useEffect } from "react";
-import { Shield, Users, DollarSign, Loader2, LogOut, Sun, Moon, Plus, Trash2, X, Eye, EyeOff, RotateCcw } from "lucide-react";
-import { listarTodosUsuarios, definirPlano, excluirUsuario, restaurarUsuario, contarPacientesPorUsuario, VALOR_PLANO } from "../services/db.js";
+import { Shield, Users, DollarSign, Loader2, LogOut, Sun, Moon, Plus, Trash2, X, Eye, EyeOff, RotateCcw, Clock } from "lucide-react";
+import { listarTodosUsuarios, definirPlano, excluirUsuario, restaurarUsuario, contarPacientesPorUsuario, VALOR_PLANO, DIAS_PLANO } from "../services/db.js";
 import { sair } from "../services/auth.js";
 import { useTema } from "../lib/theme.jsx";
 import { useAuth } from "../lib/auth.jsx";
 import { br } from "../lib/utils.js";
 import { validateNovoUsuario, primeiroErro } from "../lib/validate.js";
-import { doc, setDoc, serverTimestamp, getFirestore } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp, getFirestore, Timestamp } from "firebase/firestore";
 import { initializeApp, getApps, deleteApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 
-const PLANOS = ["nenhum", "mensal", "trimestral", "anual", "vitalicio"];
-const LABEL  = { nenhum: "Sem plano", mensal: "Mensal", trimestral: "Trimestral", anual: "Anual", vitalicio: "Vitalício" };
+const PLANOS = ["nenhum", "semanal", "mensal", "trimestral", "semestral", "anual", "vitalicio"];
+const LABEL  = {
+  nenhum:     "Sem plano",
+  semanal:    "Semanal",
+  mensal:     "Mensal",
+  trimestral: "Trimestral",
+  semestral:  "Semestral",
+  anual:      "Anual",
+  vitalicio:  "Vitalício",
+};
 
-function receitaUsuario(u) {
-  if (!u.plano || u.plano === "nenhum") return 0;
-  if (u.plano === "vitalicio") return 0;
-  if (u.plano === "anual") return VALOR_PLANO.anual;
-  const desde = u.planoDesde?.toDate ? u.planoDesde.toDate() : (u.planoDesde ? new Date(u.planoDesde) : null);
-  if (!desde) return VALOR_PLANO[u.plano] || 0;
-  const meses = Math.max(1, Math.floor((Date.now() - desde.getTime()) / (1000 * 60 * 60 * 24 * 30)));
-  if (u.plano === "mensal")      return +(VALOR_PLANO.mensal * meses).toFixed(2);
-  if (u.plano === "trimestral")  return +(VALOR_PLANO.trimestral * Math.ceil(meses / 3)).toFixed(2);
-  return VALOR_PLANO[u.plano] || 0;
+function fmtData(val) {
+  if (!val) return null;
+  try {
+    const d = val?.toDate ? val.toDate() : new Date(val);
+    return d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  } catch { return null; }
 }
 
-// ─── Cria conta + perfil em uma única operação atômica ────────
-// Usa app secundário (não desloga o admin) e escreve o doc com o token
-// do próprio usuário recém-criado (isDono passa nas regras).
+function diasRestantes(acessoAte) {
+  if (!acessoAte) return null;
+  try {
+    const d = acessoAte?.toDate ? acessoAte.toDate() : new Date(acessoAte);
+    const diff = Math.ceil((d.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+    return diff;
+  } catch { return null; }
+}
+
+function receitaUsuario(u) {
+  if (!u.plano || u.plano === "nenhum" || u.plano === "vitalicio") return 0;
+  const desde = u.planoDesde?.toDate ? u.planoDesde.toDate() : (u.planoDesde ? new Date(u.planoDesde) : null);
+  if (!desde) return VALOR_PLANO[u.plano] || 0;
+  const dias = Math.max(1, Math.floor((Date.now() - desde.getTime()) / (1000 * 60 * 60 * 24)));
+  const ciclo = DIAS_PLANO[u.plano] || 30;
+  const ciclos = Math.ceil(dias / ciclo);
+  return +((VALOR_PLANO[u.plano] || 0) * ciclos).toFixed(2);
+}
+
 async function criarUsuarioCompleto({ email, senha, perfil }) {
   const mainApp = getApps()[0];
   const config = mainApp.options;
   const secondaryAppName = "secondary_" + Date.now();
   let secondaryApp = null;
-
   try {
-    // 1. Cria app + auth + firestore secundários
     secondaryApp = initializeApp(config, secondaryAppName);
     const secondaryAuth = getAuth(secondaryApp);
     const secondaryDb = getFirestore(secondaryApp);
-
-    // 2. Cria a conta no Auth
     const cred = await createUserWithEmailAndPassword(secondaryAuth, email, senha);
     const uid = cred.user.uid;
-    console.log("[criarUsuario] Auth criado:", uid);
-
-    // 3. Escreve o perfil ENQUANTO o secondary ainda está logado como o novo user
-    //    Como isDono(uid) é true para o próprio usuário, a regra permite.
     await setDoc(doc(secondaryDb, "usuarios", uid), perfil);
-    console.log("[criarUsuario] Firestore criado para:", uid);
-
-    // 4. Agora sim, desloga
     await secondaryAuth.signOut();
-
     return uid;
   } catch (err) {
-    console.error("[criarUsuario] ERRO:", err.code, err.message, err);
+    console.error("[criarUsuario] ERRO:", err.code, err.message);
     throw err;
   } finally {
-    // 5. Sempre limpa o app secundário
     if (secondaryApp) {
-      try { await deleteApp(secondaryApp); }
-      catch (e) { console.warn("[criarUsuario] erro ao limpar app secundário:", e); }
+      try { await deleteApp(secondaryApp); } catch {}
     }
   }
 }
@@ -92,9 +88,12 @@ function ModalAddUsuario({ onClose, onAdicionado }) {
     setErros([]);
     const { data, errors } = validateNovoUsuario({ email, senha, nome, clinica });
     if (errors.length) { setErros(errors); return; }
-
     setSalvando(true);
     try {
+      // Calcula acessoAte
+      const dias = DIAS_PLANO[plano] || 0;
+      const acessoAte = dias ? Timestamp.fromDate(new Date(Date.now() + dias * 86400000)) : null;
+
       const perfilDoc = {
         email: data.email,
         nome: data.nome,
@@ -103,27 +102,18 @@ function ModalAddUsuario({ onClose, onAdicionado }) {
         crm: "",
         plano,
         planoDesde: serverTimestamp(),
+        acessoAte,
+        status: "ativo",
+        statusAssinatura: "ativo",
         criadoEm: serverTimestamp(),
         origem: "admin",
         excluido: false,
       };
-
-      const uid = await criarUsuarioCompleto({
-        email: data.email,
-        senha,
-        perfil: perfilDoc,
-      });
-
+      const uid = await criarUsuarioCompleto({ email: data.email, senha, perfil: perfilDoc });
       onAdicionado({
-        id: uid,
-        email: data.email,
-        nome: data.nome,
-        clinica: data.clinica,
-        medico: data.nome,
-        plano,
-        origem: "admin",
-        planoDesde: new Date(),
-        excluido: false,
+        id: uid, email: data.email, nome: data.nome, clinica: data.clinica,
+        medico: data.nome, plano, origem: "admin", planoDesde: new Date(),
+        acessoAte: acessoAte?.toDate(), excluido: false, status: "ativo",
       });
       onClose();
     } catch (e) {
@@ -131,11 +121,10 @@ function ModalAddUsuario({ onClose, onAdicionado }) {
         "auth/email-already-in-use": "Já existe uma conta com esse email.",
         "auth/invalid-email": "Email inválido.",
         "auth/weak-password": "Senha fraca.",
-        "auth/network-request-failed": "Falha de rede. Verifique sua conexão.",
-        "permission-denied": "Sem permissão no Firestore. Verifique as regras.",
+        "auth/network-request-failed": "Falha de rede.",
+        "permission-denied": "Sem permissão no Firestore.",
       };
-      const msg = msgs[e.code] || `Erro: ${e.message || "tente novamente."}`;
-      setErros([{ campo: "email", err: msg }]);
+      setErros([{ campo: "email", err: msgs[e.code] || `Erro: ${e.message}` }]);
       setSalvando(false);
     }
   };
@@ -154,7 +143,6 @@ function ModalAddUsuario({ onClose, onAdicionado }) {
           <h2 style={{ fontSize: 18, fontWeight: 700, margin: 0 }}>Adicionar usuário</h2>
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "var(--inkFaint)" }}><X size={20} /></button>
         </div>
-
         <form onSubmit={(e) => { e.preventDefault(); salvar(); }} autoComplete="off" style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           <div>
             <label style={{ fontSize: 12, color: "var(--inkFaint)", display: "block", marginBottom: 5 }}>Nome / Médico</label>
@@ -188,17 +176,20 @@ function ModalAddUsuario({ onClose, onAdicionado }) {
             <label style={{ fontSize: 12, color: "var(--inkFaint)", display: "block", marginBottom: 5 }}>Plano</label>
             <select value={plano} onChange={(e) => setPlano(e.target.value)} style={{ ...inputStyle, fontWeight: 600, color: "var(--brand)" }}>
               {PLANOS.filter((p) => p !== "nenhum").map((p) => (
-                <option key={p} value={p}>{LABEL[p]}</option>
+                <option key={p} value={p}>{LABEL[p]}{VALOR_PLANO[p] ? ` — R$ ${br(VALOR_PLANO[p].toFixed(2))}` : " — Gratuito"}</option>
               ))}
             </select>
+            {DIAS_PLANO[plano] && DIAS_PLANO[plano] < 99999 && (
+              <p style={{ fontSize: 12, color: "var(--inkFaint)", marginTop: 6 }}>
+                Acesso por {DIAS_PLANO[plano]} dias a partir de hoje.
+              </p>
+            )}
           </div>
-
           {erros.length > 0 && (
             <div style={{ background: "var(--surface2)", color: "var(--bad, #c0392b)", padding: "10px 14px", borderRadius: 8, fontSize: 13 }}>
               {primeiroErro(erros)}
             </div>
           )}
-
           <div style={{ display: "flex", gap: 10, marginTop: 8 }}>
             <button type="button" onClick={onClose} className="btn btn-ghost" style={{ flex: 1, justifyContent: "center" }}>Cancelar</button>
             <button type="submit" disabled={salvando} className="btn btn-primary" style={{ flex: 1, justifyContent: "center" }}>
@@ -215,12 +206,12 @@ function ModalAddUsuario({ onClose, onAdicionado }) {
 export default function Admin() {
   const { tema, alternar } = useTema();
   const { user } = useAuth();
-  const [usuarios, setUsuarios]     = useState([]);
-  const [pacientesCount, setPacientesCount] = useState({});  // { uid: {total, ativos} }
-  const [carregando, setCarregando] = useState(true);
-  const [salvando, setSalvando]     = useState(null);
-  const [excluindo, setExcluindo]   = useState(null);
-  const [showModal, setShowModal]   = useState(false);
+  const [usuarios, setUsuarios]           = useState([]);
+  const [pacientesCount, setPacientesCount] = useState({});
+  const [carregando, setCarregando]       = useState(true);
+  const [salvando, setSalvando]           = useState(null);
+  const [excluindo, setExcluindo]         = useState(null);
+  const [showModal, setShowModal]         = useState(false);
   const [mostrarExcluidos, setMostrarExcluidos] = useState(false);
 
   const carregar = () => {
@@ -228,7 +219,6 @@ export default function Admin() {
     listarTodosUsuarios(mostrarExcluidos)
       .then(async (lista) => {
         setUsuarios(lista);
-        // Conta pacientes em paralelo
         const counts = await contarPacientesPorUsuario(lista.map((u) => u.id));
         setPacientesCount(counts);
       })
@@ -241,13 +231,19 @@ export default function Admin() {
     setSalvando(uid);
     try {
       await definirPlano(uid, plano, user?.uid);
-      setUsuarios((us) => us.map((u) => (u.id === uid ? { ...u, plano, planoDesde: new Date() } : u)));
+      // Recalcula acessoAte localmente para atualizar a tabela sem reload
+      const dias = DIAS_PLANO[plano] || 0;
+      const novoAcessoAte = dias ? new Date(Date.now() + dias * 86400000) : null;
+      setUsuarios((us) => us.map((u) => u.id === uid
+        ? { ...u, plano, planoDesde: new Date(), acessoAte: novoAcessoAte, status: plano === "nenhum" ? "inativo" : "ativo" }
+        : u
+      ));
     } catch (e) { console.error(e); }
     setSalvando(null);
   };
 
   const excluir = async (u) => {
-    if (!window.confirm(`Desativar ${u.email}? Os dados clínicos serão preservados. Você pode restaurar depois.`)) return;
+    if (!window.confirm(`Desativar ${u.email}? Os dados clínicos serão preservados.`)) return;
     setExcluindo(u.id);
     try {
       await excluirUsuario(u.id, user?.uid);
@@ -268,16 +264,33 @@ export default function Admin() {
     setExcluindo(null);
   };
 
-  const receitaTotal  = usuarios.filter((u) => !u.excluido).reduce((s, u) => s + receitaUsuario(u), 0);
-  const assinantes    = usuarios.filter((u) => !u.excluido && u.plano && u.plano !== "nenhum").length;
-  const totalAtivos   = usuarios.filter((u) => !u.excluido).length;
+  const receitaTotal = usuarios.filter((u) => !u.excluido).reduce((s, u) => s + receitaUsuario(u), 0);
+  const assinantes   = usuarios.filter((u) => !u.excluido && u.plano && u.plano !== "nenhum").length;
+  const totalAtivos  = usuarios.filter((u) => !u.excluido).length;
 
   const badgeOrigem = (origem) => {
-    const isWebhook = origem === "webhook";
+    const isWebhook = origem === "cacto" || origem === "webhook";
     return (
-      <span style={{ display: "inline-block", padding: "2px 9px", borderRadius: 99, fontSize: 11, fontWeight: 700, letterSpacing: 0.3, background: isWebhook ? "#e8f4f8" : "var(--surface2)", color: isWebhook ? "var(--brand)" : "var(--inkFaint)" }}>
-        {isWebhook ? "Webhook" : "Admin"}
+      <span style={{ display: "inline-block", padding: "2px 9px", borderRadius: 99, fontSize: 11, fontWeight: 700, background: isWebhook ? "#e8f4f8" : "var(--surface2)", color: isWebhook ? "var(--brand)" : "var(--inkFaint)" }}>
+        {isWebhook ? "Cakto" : "Admin"}
       </span>
+    );
+  };
+
+  const badgeAcesso = (u) => {
+    if (u.plano === "vitalicio") return <span style={{ fontSize: 12, color: "var(--good)", fontWeight: 600 }}>Vitalício</span>;
+    if (!u.acessoAte) return <span style={{ fontSize: 12, color: "var(--inkFaint)" }}>—</span>;
+    const dias = diasRestantes(u.acessoAte);
+    const venceu = dias <= 0;
+    const urgente = !venceu && dias <= 5;
+    const cor = venceu ? "var(--warn)" : urgente ? "#e67e22" : "var(--inkSoft)";
+    return (
+      <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.3 }}>
+        <span style={{ fontSize: 12, color: cor, fontWeight: venceu || urgente ? 700 : 400 }}>
+          {venceu ? "Expirado" : `${dias}d restantes`}
+        </span>
+        <span style={{ fontSize: 11, color: "var(--inkFaint)" }}>{fmtData(u.acessoAte)}</span>
+      </div>
     );
   };
 
@@ -296,7 +309,7 @@ export default function Admin() {
         </div>
       </header>
 
-      <div style={{ maxWidth: 1100, margin: "0 auto", padding: "32px 24px 64px" }}>
+      <div style={{ maxWidth: 1200, margin: "0 auto", padding: "32px 24px 64px" }}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end", marginBottom: 26, flexWrap: "wrap", gap: 14 }}>
           <div>
             <h1 className="page-title" style={{ margin: 0 }}>Administração</h1>
@@ -313,9 +326,9 @@ export default function Admin() {
         </div>
 
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 14, marginBottom: 30 }}>
-          <ResumoCard Icon={Users}       label="Usuários ativos" valor={totalAtivos} />
-          <ResumoCard Icon={Shield}      label="Assinantes"      valor={assinantes}  accent="var(--good)" />
-          <ResumoCard Icon={DollarSign}  label="Receita acumulada" valor={`R$ ${br(receitaTotal.toFixed(2))}`} accent="var(--brand)" />
+          <ResumoCard Icon={Users}      label="Usuários ativos"    valor={totalAtivos} />
+          <ResumoCard Icon={Shield}     label="Assinantes"         valor={assinantes}  accent="var(--good)" />
+          <ResumoCard Icon={DollarSign} label="Receita acumulada"  valor={`R$ ${br(receitaTotal.toFixed(2))}`} accent="var(--brand)" />
         </div>
 
         {carregando ? (
@@ -331,7 +344,7 @@ export default function Admin() {
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13.5 }}>
               <thead>
                 <tr>
-                  {["Usuário", "Email", "Origem", "Plano", "Pacientes", "Receita", ""].map((h) => (
+                  {["Usuário", "Email", "Origem", "Plano", "Acesso até", "Pacientes", "Receita", ""].map((h) => (
                     <th key={h} style={{ padding: "13px 16px", textAlign: "left", fontSize: 11.5, fontWeight: 600, color: "var(--inkFaint)", textTransform: "uppercase", letterSpacing: 0.5, borderBottom: "1px solid var(--line)", background: "var(--surface2)", whiteSpace: "nowrap" }}>{h}</th>
                   ))}
                 </tr>
@@ -347,28 +360,28 @@ export default function Admin() {
                     <td style={{ padding: "13px 16px", borderBottom: "1px solid var(--line)", color: "var(--inkSoft)", whiteSpace: "nowrap" }}>{u.email}</td>
                     <td style={{ padding: "13px 16px", borderBottom: "1px solid var(--line)" }}>{badgeOrigem(u.origem)}</td>
                     <td style={{ padding: "13px 16px", borderBottom: "1px solid var(--line)" }}>
-                      <select value={u.plano || "nenhum"} onChange={(e) => mudarPlano(u.id, e.target.value)} disabled={salvando === u.id || u.excluido}
-                        style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13, fontWeight: 600, color: u.plano && u.plano !== "nenhum" ? "var(--brand)" : "var(--inkFaint)" }}>
+                      <select
+                        value={u.plano || "nenhum"}
+                        onChange={(e) => mudarPlano(u.id, e.target.value)}
+                        disabled={salvando === u.id || u.excluido}
+                        style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13, fontWeight: 600, color: u.plano && u.plano !== "nenhum" ? "var(--brand)" : "var(--inkFaint)" }}
+                      >
                         {PLANOS.map((p) => <option key={p} value={p}>{LABEL[p]}</option>)}
                       </select>
                       {salvando === u.id && <Loader2 size={13} className="spin" style={{ marginLeft: 8, verticalAlign: "middle", color: "var(--inkFaint)" }} />}
                     </td>
                     <td style={{ padding: "13px 16px", borderBottom: "1px solid var(--line)" }}>
+                      {badgeAcesso(u)}
+                    </td>
+                    <td style={{ padding: "13px 16px", borderBottom: "1px solid var(--line)" }}>
                       {pacientesCount[u.id] ? (
                         <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.3 }}>
-                          <span className="tnum" style={{ fontSize: 14, fontWeight: 700, color: "var(--ink)" }}>
-                            {pacientesCount[u.id].total}
-                          </span>
+                          <span className="tnum" style={{ fontSize: 14, fontWeight: 700 }}>{pacientesCount[u.id].total}</span>
                           <span className="tnum" style={{ fontSize: 11, color: "var(--inkFaint)" }}>
                             {pacientesCount[u.id].ativos} ativo{pacientesCount[u.id].ativos !== 1 ? "s" : ""}
-                            {pacientesCount[u.id].total - pacientesCount[u.id].ativos > 0 && (
-                              <> · {pacientesCount[u.id].total - pacientesCount[u.id].ativos} inativo{(pacientesCount[u.id].total - pacientesCount[u.id].ativos) !== 1 ? "s" : ""}</>
-                            )}
                           </span>
                         </div>
-                      ) : (
-                        <span style={{ color: "var(--inkFaint)", fontSize: 13 }}>—</span>
-                      )}
+                      ) : <span style={{ color: "var(--inkFaint)" }}>—</span>}
                     </td>
                     <td className="tnum" style={{ padding: "13px 16px", borderBottom: "1px solid var(--line)", fontWeight: 600 }}>
                       R$ {br(receitaUsuario(u).toFixed(2))}
@@ -376,12 +389,12 @@ export default function Admin() {
                     <td style={{ padding: "13px 16px", borderBottom: "1px solid var(--line)" }}>
                       {u.excluido ? (
                         <button onClick={() => restaurar(u)} disabled={excluindo === u.id}
-                          style={{ background: "none", border: "none", cursor: "pointer", color: "var(--good)", padding: 6, borderRadius: 8 }} title="Restaurar usuário">
+                          style={{ background: "none", border: "none", cursor: "pointer", color: "var(--good)", padding: 6, borderRadius: 8 }} title="Restaurar">
                           {excluindo === u.id ? <Loader2 size={15} className="spin" /> : <RotateCcw size={15} />}
                         </button>
                       ) : (
                         <button onClick={() => excluir(u)} disabled={excluindo === u.id}
-                          style={{ background: "none", border: "none", cursor: "pointer", color: "var(--inkFaint)", padding: 6, borderRadius: 8 }} title="Desativar usuário">
+                          style={{ background: "none", border: "none", cursor: "pointer", color: "var(--inkFaint)", padding: 6, borderRadius: 8 }} title="Desativar">
                           {excluindo === u.id ? <Loader2 size={15} className="spin" /> : <Trash2 size={15} />}
                         </button>
                       )}
@@ -394,8 +407,8 @@ export default function Admin() {
         )}
 
         <p style={{ fontSize: 11.5, color: "var(--inkFaint)", marginTop: 16, lineHeight: 1.6 }}>
-          Usuários desativados perdem o acesso mas os dados clínicos são preservados. Use "Ver excluídos" para restaurar.
-          Todas as ações administrativas são registradas em log de auditoria.
+          Ao mudar o plano, o prazo de acesso é recalculado automaticamente a partir de hoje.
+          Usuários desativados perdem o acesso mas os dados clínicos são preservados.
         </p>
       </div>
 
