@@ -17,10 +17,12 @@ import { auth } from "../services/firebase.js";
 import { useToast } from "../lib/toast.jsx";
 
 const LABEL_PLANO = {
+  semanal: "Semanal — R$ 19,90/sem.",
   nenhum: "Sem plano ativo",
-  mensal: "Mensal — R$ 29,90/mês",
-  trimestral: "Trimestral — R$ 79,90/trim.",
-  anual: "Anual — R$ 199,00/ano",
+  mensal: "Mensal — R$ 67,00/mês",
+  trimestral: "Trimestral — R$ 177,00/trim.",
+  semestral: "Semestral",
+  anual: "Anual",
   vitalicio: "Vitalício",
 };
 
