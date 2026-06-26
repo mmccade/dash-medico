@@ -9,19 +9,10 @@ import { useToast } from "../lib/toast.jsx";
 
 const LABEL_PLANO = {
   nenhum:     "Sem plano ativo",
-  semanal:    "Semanal — R$ 19,90/sem.",
   mensal:     "Mensal — R$ 67,00/mês",
   trimestral: "Trimestral — R$ 177,00/trim.",
-  semestral:  "Semestral",
-  anual:      "Anual",
+  anual:      "Anual — R$ 499,90/ano",
   vitalicio:  "Vitalício",
-};
-
-const LABEL_PAGAMENTO = {
-  pix:         "PIX",
-  credit_card: "Cartão de crédito",
-  debit_card:  "Cartão de débito",
-  boleto:      "Boleto",
 };
 
 function fmtData(val) {
@@ -62,32 +53,36 @@ function InfoRow({ label, value, accent, sub }) {
   );
 }
 
-const WHATSAPP_MUREV = "https://wa.me/5519SEUNUMERO";
-
 export default function MeuPerfil() {
   const { user, perfil } = useAuth();
   const toast = useToast();
 
-  // ── assinatura ──
+  // ── portal Stripe ──
   const [abrindoPortal, setAbrindoPortal] = useState(false);
-  const abrirGestao = (assunto) => {
+
+  const abrirPortal = async () => {
     setAbrindoPortal(true);
-    const portal = perfil?.cactoPortalUrl || import.meta.env.VITE_CACTO_PORTAL_URL;
-    if (portal) {
-      window.open(portal, "_blank", "noopener,noreferrer");
-    } else {
-      const msg = encodeURIComponent(`Olá! Sou ${user?.email} e gostaria de ${assunto} da minha assinatura do Murev Acompanha.`);
-      window.open(`${WHATSAPP_MUREV}?text=${msg}`, "_blank", "noopener,noreferrer");
+    try {
+      const res = await fetch("/api/create-portal", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: user?.email }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || "Falha ao abrir portal.");
+      window.location.href = body.url;
+    } catch (e) {
+      toast(e.message || "Não foi possível abrir o portal de assinatura.", "error");
+      setAbrindoPortal(false);
     }
-    setTimeout(() => setAbrindoPortal(false), 800);
   };
 
   // ── trocar email via Resend ──
-  const [novoEmail, setNovoEmail]       = useState("");
-  const [senhaEmail, setSenhaEmail]     = useState("");
+  const [novoEmail, setNovoEmail]         = useState("");
+  const [senhaEmail, setSenhaEmail]       = useState("");
   const [trocandoEmail, setTrocandoEmail] = useState(false);
-  const [erroEmail, setErroEmail]       = useState("");
-  const [emailEnviado, setEmailEnviado] = useState(false);
+  const [erroEmail, setErroEmail]         = useState("");
+  const [emailEnviado, setEmailEnviado]   = useState(false);
 
   const trocarEmail = async () => {
     setErroEmail("");
@@ -117,12 +112,12 @@ export default function MeuPerfil() {
   };
 
   // ── alterar senha ──
-  const [senhaAtual, setSenhaAtual] = useState("");
-  const [senhaNova, setSenhaNova]   = useState("");
-  const [senhaConf, setSenhaConf]   = useState("");
-  const [verSenha, setVerSenha]     = useState(false);
+  const [senhaAtual, setSenhaAtual]       = useState("");
+  const [senhaNova, setSenhaNova]         = useState("");
+  const [senhaConf, setSenhaConf]         = useState("");
+  const [verSenha, setVerSenha]           = useState(false);
   const [trocandoSenha, setTrocandoSenha] = useState(false);
-  const [erroSenha, setErroSenha]   = useState("");
+  const [erroSenha, setErroSenha]         = useState("");
 
   const reqs = [
     { ok: senhaNova.length >= 8,    label: "Mínimo 8 caracteres" },
@@ -156,8 +151,6 @@ export default function MeuPerfil() {
   const dias         = diasRestantes(perfil?.acessoAte);
   const vencendo     = dias !== null && dias <= 5 && dias > 0;
   const vencido      = dias !== null && dias <= 0;
-  const formaPgto    = perfil?.paymentMethod || perfil?.metodoPagamento;
-  const labelPgto    = LABEL_PAGAMENTO[formaPgto] || formaPgto || null;
 
   return (
     <div style={{ maxWidth: 560, margin: "0 auto", display: "flex", flexDirection: "column", gap: 22 }}>
@@ -174,7 +167,6 @@ export default function MeuPerfil() {
           value={LABEL_PLANO[perfil?.plano] || LABEL_PLANO.nenhum}
           accent={planoAtivo ? "var(--brand)" : "var(--inkFaint)"}
         />
-        {labelPgto && <InfoRow label="Forma de pagamento" value={labelPgto} />}
         {planoAtivo && dataAdesao && <InfoRow label="Assinante desde" value={dataAdesao} />}
         {planoAtivo && perfil?.plano !== "vitalicio" && dataValidade && (
           <InfoRow
@@ -191,29 +183,35 @@ export default function MeuPerfil() {
         {perfil?.plano === "vitalicio" && (
           <InfoRow label="Acesso válido até" value="Vitalício" accent="var(--good)" />
         )}
-        {!planoAtivo && (
-          <div style={{ fontSize: 13, color: "var(--inkFaint)", marginTop: 4 }}>
-            Entre em contato com a Murev pelo WhatsApp para ativar ou mudar seu plano.
-          </div>
-        )}
       </Secao>
 
       {/* ── Assinatura ── */}
-      {planoAtivo && (
+      {planoAtivo && perfil?.plano !== "vitalicio" && (
         <Secao titulo="Assinatura" Icon={CreditCard}>
           <p style={{ fontSize: 13, color: "var(--inkSoft)", marginBottom: 16, lineHeight: 1.6 }}>
-            Sua cobrança é processada com segurança pela Cacto. Para trocar de plano ou cancelar
-            a renovação, fale com a gente pelo WhatsApp.
+            Gerencie seu plano, troque o cartão ou cancele a renovação diretamente pelo portal seguro da Stripe.
           </p>
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <button className="btn btn-ghost" onClick={() => abrirGestao("trocar o plano")}
-              disabled={abrindoPortal} style={{ width: "100%", justifyContent: "flex-start", gap: 9 }}>
-              <ArrowUpDown size={15} color="var(--brand)" /> Trocar de plano
+            <button
+              className="btn btn-ghost"
+              onClick={abrirPortal}
+              disabled={abrindoPortal}
+              style={{ width: "100%", justifyContent: "flex-start", gap: 9 }}
+            >
+              {abrindoPortal
+                ? <><Loader2 size={14} className="spin" /> Abrindo portal…</>
+                : <><ArrowUpDown size={15} color="var(--brand)" /> Trocar de plano</>
+              }
             </button>
-            <button className="btn btn-ghost" onClick={() => {
-              if (!window.confirm("Deseja solicitar o cancelamento da renovação? Seu acesso continua ativo até o fim do período já pago.")) return;
-              abrirGestao("cancelar a renovação");
-            }} disabled={abrindoPortal} style={{ width: "100%", justifyContent: "flex-start", gap: 9 }}>
+            <button
+              className="btn btn-ghost"
+              onClick={() => {
+                if (!window.confirm("Ao cancelar, seu acesso continua até o fim do período já pago. Deseja continuar?")) return;
+                abrirPortal();
+              }}
+              disabled={abrindoPortal}
+              style={{ width: "100%", justifyContent: "flex-start", gap: 9 }}
+            >
               <XCircle size={15} color="var(--warn)" /> Cancelar renovação
             </button>
           </div>
