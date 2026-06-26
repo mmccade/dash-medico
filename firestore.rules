@@ -11,7 +11,8 @@ service cloud.firestore {
     function naoMexeEmCamposDeAssinatura() {
       return !request.resource.data.diff(resource.data).affectedKeys()
         .hasAny(['status', 'statusAssinatura', 'plano', 'acessoAte',
-                 'planoDesde', 'pausadoEm', 'motivoPausa', 'cactoCustomerId',
+                 'planoDesde', 'pausadoEm', 'motivoPausa',
+                 'stripeCustomerId', 'stripeSubscriptionId',
                  'excluido', 'origem']);
     }
     function donoAtivo(database, uid) {
@@ -39,6 +40,9 @@ service cloud.firestore {
       allow read:   if false;
       allow update: if false;
       allow delete: if false;
+    }
+    match /{document=**} {
+      allow read, write: if false;
     }
   }
 }
