@@ -4,6 +4,7 @@
 //   mensagem do médico editável)
 
 import { imc, br, fmtData, primeiroCiclo, ultimoCiclo, mesesTrat, imcMeta, massaMagraKg } from "../lib/utils.js";
+import { silhuetaSvgPdf, nomeLocal } from "../components/SilhuetaAplicacao.jsx";
 
 const esc = (s) =>
   (s == null ? "" : String(s)).replace(/[&<>"]/g, (c) =>
@@ -98,11 +99,19 @@ export function htmlPaciente(p, config) {
           </div>`).join("")}
       </div>
       <div style="font-size:12px;color:#5a6663;line-height:1.6">
-        <b style="color:#27322f">Local:</b> ${esc(c.local)} &nbsp;·&nbsp;
+        <b style="color:#27322f">Local:</b> ${esc(c.local)}${c.localAplicacao ? ` &nbsp;·&nbsp; <b style="color:#27322f">Aplicação:</b> ${esc(nomeLocal(c.localAplicacao))}` : ""} &nbsp;·&nbsp;
         <b style="color:#27322f">Suplementação:</b> ${esc(c.suplementacao) || "—"}<br>
         <b style="color:#27322f">Colaterais:</b> ${esc(c.colaterais) || "—"}<br>
         <b style="color:#27322f">Observações:</b> ${esc(c.obs) || "—"}
       </div>
+      ${c.localAplicacao ? `
+        <div style="display:flex;align-items:center;gap:14px;margin-top:12px;padding-top:12px;border-top:1px solid #eef2f2;page-break-inside:avoid">
+          ${silhuetaSvgPdf(c.localAplicacao)}
+          <div>
+            <div style="font-size:11px;color:#8a9693;text-transform:uppercase;letter-spacing:.4px">Local de aplicação</div>
+            <div style="font-size:14px;font-weight:700;color:#0d7a82;margin-top:2px">${esc(nomeLocal(c.localAplicacao))}</div>
+          </div>
+        </div>` : ""}
     </div>`).join("");
 
   return `
