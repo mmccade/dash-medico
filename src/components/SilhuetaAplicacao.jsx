@@ -13,14 +13,16 @@ import { AlertTriangle, ArrowLeft } from "lucide-react";
 
 // ── Locais e metadados ────────────────────────────────────────
 export const LOCAIS_APLICACAO = [
-  { id: "abdomen_se", nome: "Abdômen superior esq.", regiao: "abdomen" },
-  { id: "abdomen_sd", nome: "Abdômen superior dir.", regiao: "abdomen" },
-  { id: "abdomen_ie", nome: "Abdômen inferior esq.", regiao: "abdomen" },
-  { id: "abdomen_id", nome: "Abdômen inferior dir.", regiao: "abdomen" },
-  { id: "braco_e",    nome: "Braço esquerdo (posterior)", regiao: "braco" },
-  { id: "braco_d",    nome: "Braço direito (posterior)",  regiao: "braco" },
-  { id: "coxa_e",     nome: "Coxa esquerda (frontal)",    regiao: "coxa" },
-  { id: "coxa_d",     nome: "Coxa direita (frontal)",     regiao: "coxa" },
+  { id: "abdomen_se", nome: "Abdômen superior esquerdo (≥5cm do umbigo)", regiao: "abdomen" },
+  { id: "abdomen_sd", nome: "Abdômen superior direito (≥5cm do umbigo)",  regiao: "abdomen" },
+  { id: "abdomen_ie", nome: "Abdômen inferior esquerdo (≥5cm do umbigo)", regiao: "abdomen" },
+  { id: "abdomen_id", nome: "Abdômen inferior direito (≥5cm do umbigo)",  regiao: "abdomen" },
+  { id: "flanco_e",   nome: "Flanco esquerdo (lateral, acima do quadril)", regiao: "flanco" },
+  { id: "flanco_d",   nome: "Flanco direito (lateral, acima do quadril)",  regiao: "flanco" },
+  { id: "braco_e",    nome: "Braço esquerdo — posterior, terço médio",  regiao: "braco" },
+  { id: "braco_d",    nome: "Braço direito — posterior, terço médio",   regiao: "braco" },
+  { id: "coxa_e",     nome: "Coxa esquerda — face frontal/lateral, terço médio", regiao: "coxa" },
+  { id: "coxa_d",     nome: "Coxa direita — face frontal/lateral, terço médio",  regiao: "coxa" },
 ];
 
 export function nomeLocal(id) {
@@ -31,9 +33,10 @@ function regiaoDe(id) {
 }
 
 const REGIOES = [
-  { id: "abdomen", nome: "Abdômen", cx: 60, cy: 118 },
-  { id: "braco",   nome: "Braços",  cx: 24, cy: 92 },
-  { id: "coxa",    nome: "Coxas",   cx: 47, cy: 180 },
+  { id: "abdomen", nome: "Abdômen",  cx: 60, cy: 118 },
+  { id: "flanco",  nome: "Flancos",  cx: 20, cy: 130 },
+  { id: "braco",   nome: "Braços",   cx: 24, cy: 92 },
+  { id: "coxa",    nome: "Coxas",    cx: 47, cy: 180 },
 ];
 
 const CORPO_PATH =
@@ -144,10 +147,44 @@ function ZoomCoxa({ valor, onChange }) {
   );
 }
 
+
+function ZoomFlanco({ valor, onChange }) {
+  const pts = [
+    { id: "flanco_e", cx: 35, cy: 60, nome: "Flanco esquerdo" },
+    { id: "flanco_d", cx: 85, cy: 60, nome: "Flanco direito" },
+  ];
+  return (
+    <svg viewBox="0 0 120 140" width="240" height="280">
+      {[35, 85].map((cx, i) => (
+        <g key={i}>
+          {/* Região do flanco */}
+          <ellipse cx={cx} cy={60} rx={18} ry={50} fill={VERDE_BG} stroke={VERDE} strokeWidth="1.5" />
+          {/* Zona permitida */}
+          <ellipse cx={cx} cy={60} rx={13} ry={32} fill="#fff" stroke={VERDE} strokeWidth="1.2" strokeDasharray="3 2" />
+          {/* Proibido: muito próximo à crista ilíaca */}
+          <ellipse cx={cx} cy={100} rx={18} ry={12} fill={VERM_BG} opacity="0.6" />
+        </g>
+      ))}
+      <text x="60" y="9" textAnchor="middle" fontSize="6.5" fill={VERM}>evite crista ilíaca e costelas</text>
+      {pts.map((p) => {
+        const on = valor === p.id;
+        return (
+          <g key={p.id} style={{ cursor: "pointer" }} onClick={() => onChange(on ? "" : p.id)}>
+            <circle cx={p.cx} cy={p.cy} r="11" fill="transparent" />
+            <circle cx={p.cx} cy={p.cy} r={on ? 8 : 6} fill={on ? VERDE : "#fff"} stroke={VERDE} strokeWidth="2" style={{ transition: "all .15s" }} />
+            {on && <circle cx={p.cx} cy={p.cy} r="3" fill="#fff" />}
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
 const AVISO_REGIAO = {
   abdomen: "Mantenha pelo menos 5 cm de distância do umbigo. Evite cicatrizes e estrias.",
-  braco: "Aplique na região posterior (atrás), no terço médio. Evite ombro e cotovelo.",
-  coxa: "Aplique na face frontal ou lateral externa, terço médio. Evite virilha e joelho.",
+  flanco:  "Aplique na região lateral, acima do quadril. Evite a crista ilíaca e costelas. Bom local para rodízio.",
+  braco:   "Aplique na região posterior (atrás), no terço médio. Evite ombro e cotovelo.",
+  coxa:    "Aplique na face frontal ou lateral externa, terço médio. Evite virilha e joelho.",
 };
 
 // ── Componente principal ──────────────────────────────────────
@@ -208,7 +245,7 @@ export default function SilhuetaAplicacao({ valor, onChange, somenteLeitura = fa
   }
 
   // Nível 2: zoom da região com zonas
-  const ZoomComp = regiao === "abdomen" ? ZoomAbdomen : regiao === "braco" ? ZoomBraco : ZoomCoxa;
+  const ZoomComp = regiao === "abdomen" ? ZoomAbdomen : regiao === "flanco" ? ZoomFlanco : regiao === "braco" ? ZoomBraco : ZoomCoxa;
   const nomeRegiao = REGIOES.find((r) => r.id === regiao)?.nome;
 
   return (
@@ -246,9 +283,21 @@ export default function SilhuetaAplicacao({ valor, onChange, somenteLeitura = fa
 }
 
 // ── SVG estático para PDF (silhueta + ponto destacado) ────────
+// Mapa de posições para PDF (centro visual de cada região)
+const PDF_POSICOES = {
+  abdomen_se: { cx: 48, cy: 108 }, abdomen_sd: { cx: 72, cy: 108 },
+  abdomen_ie: { cx: 48, cy: 128 }, abdomen_id: { cx: 72, cy: 128 },
+  flanco_e: { cx: 22, cy: 125 }, flanco_d: { cx: 98, cy: 125 },
+  braco_e: { cx: 18, cy: 88 }, braco_d: { cx: 102, cy: 88 },
+  coxa_e: { cx: 44, cy: 178 }, coxa_d: { cx: 76, cy: 178 },
+};
+
 export function silhuetaSvgPdf(localId) {
   const r = REGIOES.find((x) => x.id === regiaoDe(localId));
-  const ponto = r
+  const pos = localId ? PDF_POSICOES[localId] : null;
+  const ponto = pos
+    ? `<circle cx="${pos.cx}" cy="${pos.cy}" r="7" fill="#0d7a82" stroke="#0d7a82" stroke-width="2" /><circle cx="${pos.cx}" cy="${pos.cy}" r="2.5" fill="#fff" />`
+    : r
     ? `<circle cx="${r.cx}" cy="${r.cy}" r="7" fill="#0d7a82" stroke="#0d7a82" stroke-width="2" /><circle cx="${r.cx}" cy="${r.cy}" r="2.5" fill="#fff" />`
     : "";
   return `<svg viewBox="0 0 120 240" width="70" height="140" style="overflow:visible">
