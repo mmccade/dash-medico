@@ -18,7 +18,8 @@ import { imc, br, fmtData, primeiroCiclo, ultimoCiclo, perdaPeso, mesesTrat, par
 import { Avatar, Toggle } from "../components/ui.jsx";
 import { LinhaChart } from "../components/charts.jsx";
 import { useIsMobile } from "../components/Shell.jsx";
-import { baixarPdfPaciente, baixarPdfMetaBatida } from "../services/pdf.js";
+import { baixarPdfPaciente, baixarPdfMetaBatida, baixarPdfCiclo } from "../services/pdf.js";
+import { baixarPdfPlano } from "../services/pdf-clinico.js";
 import { validateCiclo, validatePaciente, primeiroErro } from "../lib/validate.js";
 import { InputDecimal, InputInteiro, InputData, numeroParaMascara } from "../components/inputs.jsx";
 import ModalDesativar from "../components/ModalDesativar.jsx";
@@ -746,7 +747,23 @@ export default function Ficha({ pacienteId, navegar }) {
   const PainelExames = <Exames pacienteId={p.id} pacienteGenero={p.sexo === "Masculino" ? "M" : "F"} pacienteNome={p.nome} navegar={navegar} />;
   const PainelAnamnese = <Anamnese pacienteId={p.id} pacienteNome={p.nome} navegar={navegar} />;
   const PainelProtocolo = <Protocolo pacienteId={p.id} pacienteNome={p.nome} />;
-  const PainelPlano = <PlanoAcompanhamento pacienteId={p.id} pacienteNome={p.nome} />;
+  const gerarPdfPlano = async () => {
+    toast("Gerando PDF do plano…");
+    try { await baixarPdfPlano({ paciente: p, plano: p.plano, config }); toast("PDF gerado"); }
+    catch (e) { console.error(e); toast("Erro ao gerar PDF"); }
+  };
+  const PainelPlano = (
+    <div>
+      {p.plano && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+          <button className="btn btn-ghost" onClick={gerarPdfPlano} style={{ fontSize: 13 }}>
+            <FileText size={14} /> PDF do plano
+          </button>
+        </div>
+      )}
+      <PlanoAcompanhamento pacienteId={p.id} pacienteNome={p.nome} />
+    </div>
+  );
 
   if (!p.ciclos.length) {
     return (
@@ -889,6 +906,7 @@ export default function Ficha({ pacienteId, navegar }) {
                     <KV k="Gordura visceral" v={c.visceral != null ? c.visceral : "—"} />
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(210px, 1fr))", gap: 18 }}>
+                    <KV k="Medicação prescrita" v={c.medicacao} />
                     <KV k="Suplementação" v={c.suplementacao} />
                     <KV k="Onde aplicou" v={c.local} />
                     <KV k="Colaterais relatados" v={c.colaterais} />
@@ -903,6 +921,20 @@ export default function Ficha({ pacienteId, navegar }) {
                     </div>
                   )}
                   <KV k="Observações do médico" v={c.obs} />
+                  <div style={{ display: "flex", justifyContent: "flex-end", paddingTop: 8 }}>
+                    <button
+                      className="btn btn-ghost"
+                      style={{ fontSize: 12, padding: "6px 12px" }}
+                      onClick={() => {
+                        toast("Gerando PDF do ciclo…");
+                        baixarPdfCiclo({ paciente: p, ciclo: c, config })
+                          .then(() => toast("PDF gerado"))
+                          .catch(() => toast("Erro ao gerar PDF"));
+                      }}
+                    >
+                      <FileText size={13} /> PDF deste ciclo
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
