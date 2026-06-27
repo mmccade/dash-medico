@@ -108,6 +108,7 @@ export function validateCiclo(raw) {
   const visceralR     = int(raw.visceral, { min: 0, max: 50 });
   const unidade       = str(raw.unidade, 5);
   const local         = str(raw.local, 100);
+  const localAplicacao = str(raw.localAplicacao, 30);
   const suplementacao = str(raw.suplementacao, OBS_MAX);
   const colaterais    = str(raw.colaterais, OBS_MAX);
   const obs           = str(raw.obs, OBS_MAX);
@@ -141,6 +142,7 @@ export function validateCiclo(raw) {
       unidade: unidade.value || "MG",
       doses,
       local: local.value || "Casa",
+      localAplicacao: localAplicacao.value || "",
       suplementacao: suplementacao.value,
       colaterais: colaterais.value,
       obs: obs.value,
