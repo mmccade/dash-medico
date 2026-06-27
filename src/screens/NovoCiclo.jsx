@@ -7,6 +7,7 @@ import { useToast } from "../lib/toast.jsx";
 import { parseNum } from "../lib/utils.js";
 import { validateCiclo, primeiroErro } from "../lib/validate.js";
 import { InputDecimal, InputInteiro, InputData } from "../components/inputs.jsx";
+import SilhuetaAplicacao from "../components/SilhuetaAplicacao.jsx";
 
 function labelMes(iso) {
   if (!iso) return "";
@@ -27,7 +28,7 @@ export default function NovoCiclo({ pacienteId, navegar }) {
     data: hoje,
     peso: "", gordura: "", massaMagra: "", visceral: "",
     unidade: "MG", d1: "", d2: "", d3: "", d4: "",
-    local: "Casa", suplementacao: "", colaterais: "", obs: "",
+    local: "Casa", localAplicacao: "", suplementacao: "", colaterais: "", obs: "",
   });
 
   if (!p) { navegar("pacientes"); return null; }
@@ -54,7 +55,7 @@ export default function NovoCiclo({ pacienteId, navegar }) {
       peso: f.peso, gordura: f.gordura, massaMagra: f.massaMagra, visceral: f.visceral,
       unidade: f.unidade,
       doses: [f.d1, f.d2, f.d3, f.d4].map(parseNum),
-      local: f.local, suplementacao: f.suplementacao, colaterais: f.colaterais, obs: f.obs,
+      local: f.local, localAplicacao: f.localAplicacao, suplementacao: f.suplementacao, colaterais: f.colaterais, obs: f.obs,
     };
     const { data, errors } = validateCiclo(rawCiclo);
     if (errors.length) { toast(primeiroErro(errors)); return; }
@@ -140,8 +141,15 @@ export default function NovoCiclo({ pacienteId, navegar }) {
 
       <Secao titulo="Aplicação e adesão">
         <div style={{ marginBottom: 14 }}>
-          <label style={{ fontSize: 12.5, color: "var(--inkSoft)", fontWeight: 600, display: "block", marginBottom: 7 }}>Local de aplicação</label>
+          <label style={{ fontSize: 12.5, color: "var(--inkSoft)", fontWeight: 600, display: "block", marginBottom: 7 }}>Onde aplicou</label>
           <Segment opcoes={["Casa", "Clínica"]} valor={f.local} on={(v) => set("local", v)} />
+        </div>
+        <div style={{ marginBottom: 16 }}>
+          <label style={{ fontSize: 12.5, color: "var(--inkSoft)", fontWeight: 600, display: "block", marginBottom: 10 }}>Local de aplicação no corpo</label>
+          <p style={{ fontSize: 12, color: "var(--inkFaint)", marginBottom: 12 }}>
+            Marque o ponto onde a dose foi aplicada. Alternar o local a cada aplicação evita irritação e lipodistrofia.
+          </p>
+          <SilhuetaAplicacao valor={f.localAplicacao} onChange={(v) => set("localAplicacao", v)} />
         </div>
         <CampoTexto label="Suplementação" v={f.suplementacao} on={(v) => set("suplementacao", v)} ph="Ex: vitamina D, creatina…" max={500} />
       </Secao>
