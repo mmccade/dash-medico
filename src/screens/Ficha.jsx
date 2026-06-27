@@ -6,7 +6,12 @@
 // + PDF de meta batida disponível quando bater
 
 import { useState, useEffect } from "react";
-import { ArrowLeft, Trash2, Stethoscope, FileText, ChevronDown, Pencil, X, Loader2, Check, Trophy } from "lucide-react";
+import { ArrowLeft, Trash2, Stethoscope, FileText, ChevronDown, Pencil, X, Loader2, Check, Trophy, Activity, FlaskConical, ClipboardList, Pill, Target } from "lucide-react";
+import Exames from "./Exames.jsx";
+import Anamnese from "./Anamnese.jsx";
+import Protocolo from "./Protocolo.jsx";
+import PlanoAcompanhamento from "./PlanoAcompanhamento.jsx";
+import SilhuetaAplicacao, { nomeLocal } from "../components/SilhuetaAplicacao.jsx";
 import { useStore } from "../lib/store.jsx";
 import { useToast } from "../lib/toast.jsx";
 import { imc, br, fmtData, primeiroCiclo, ultimoCiclo, perdaPeso, mesesTrat, parseNum, imcMeta, metaPesoBatida, metaVisceralBatida, massaMagraKg } from "../lib/utils.js";
@@ -251,7 +256,8 @@ function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
         { label: "Massa magra", valor: dadosValidados.massaMagra ? `${br(dadosValidados.massaMagra)} kg` : "—" },
         { label: "Gordura visceral", valor: dadosValidados.visceral || "—" },
         { label: "Doses (S1-S4)", valor: dadosValidados.doses.map(d => br(d)).join(" · ") + ` ${dadosValidados.unidade?.toLowerCase()}` },
-        { label: "Local", valor: dadosValidados.local },
+        { label: "Onde aplicou", valor: dadosValidados.local },
+        { label: "Local no corpo", valor: dadosValidados.localAplicacao ? nomeLocal(dadosValidados.localAplicacao) : "—" },
         { label: "Suplementação", valor: dadosValidados.suplementacao || "—" },
         { label: "Colaterais", valor: dadosValidados.colaterais || "—" },
         { label: "Observações", valor: dadosValidados.obs || "—" },
@@ -336,11 +342,18 @@ function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
             </div>
           </div>
 
-          <div className="field"><label>Local</label>
+          <div className="field"><label>Onde aplicou</label>
             <div style={{ display: "inline-flex", background: "var(--surface2)", borderRadius: 10, padding: 3 }}>
               {["Casa","Clínica"].map((o) => (
                 <button key={o} onClick={() => set("local", o)} style={{ borderRadius: 8, padding: "7px 18px", fontSize: 13, fontWeight: 600, background: f.local === o ? "var(--surface)" : "transparent", color: f.local === o ? "var(--brand)" : "var(--inkFaint)" }}>{o}</button>
               ))}
+            </div>
+          </div>
+
+          <div className="field">
+            <label>Local de aplicação no corpo</label>
+            <div style={{ marginTop: 8 }}>
+              <SilhuetaAplicacao valor={f.localAplicacao || ""} onChange={(v) => set("localAplicacao", v)} />
             </div>
           </div>
 
@@ -551,6 +564,7 @@ export default function Ficha({ pacienteId, navegar }) {
   const [modalPdf, setModalPdf] = useState(false);
   const [modalDesativar, setModalDesativar] = useState(false);
   const [animarSaindo, setAnimarSaindo] = useState(false);
+  const [abaAtiva, setAbaAtiva] = useState("ciclos"); // ciclos | exames | anamnese
 
   if (!p) { navegar("pacientes"); return null; }
 
@@ -705,17 +719,53 @@ export default function Ficha({ pacienteId, navegar }) {
     </>
   );
 
+  const Tabs = (
+    <div style={{ display: "flex", gap: 4, background: "var(--surface2)", borderRadius: 12, padding: 4, marginBottom: 24, flexWrap: "wrap" }}>
+      {[
+        { id: "ciclos",   label: "Ciclos",   Icon: Activity },
+        { id: "plano",    label: "Plano",    Icon: Target },
+        { id: "exames",   label: "Exames",   Icon: FlaskConical },
+        { id: "anamnese", label: "Anamnese", Icon: ClipboardList },
+        { id: "protocolo", label: "Medicamentos", Icon: Pill },
+      ].map((t) => (
+        <button key={t.id} onClick={() => setAbaAtiva(t.id)} style={{
+          flex: "1 1 auto", minWidth: 110,
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
+          padding: "10px 16px", borderRadius: 9, fontSize: 13.5, fontWeight: 600,
+          background: abaAtiva === t.id ? "var(--surface)" : "transparent",
+          color: abaAtiva === t.id ? "var(--brand)" : "var(--inkFaint)",
+          boxShadow: abaAtiva === t.id ? "0 1px 3px rgba(0,0,0,.08)" : "none",
+          transition: "all 0.15s",
+        }}>
+          <t.Icon size={15} /> {t.label}
+        </button>
+      ))}
+    </div>
+  );
+
+  const PainelExames = <Exames pacienteId={p.id} pacienteGenero={p.sexo === "Masculino" ? "M" : "F"} pacienteNome={p.nome} navegar={navegar} />;
+  const PainelAnamnese = <Anamnese pacienteId={p.id} pacienteNome={p.nome} navegar={navegar} />;
+  const PainelProtocolo = <Protocolo pacienteId={p.id} pacienteNome={p.nome} />;
+  const PainelPlano = <PlanoAcompanhamento pacienteId={p.id} pacienteNome={p.nome} />;
+
   if (!p.ciclos.length) {
     return (
       <div className={animarSaindo ? "ficha-saindo" : ""}>
         {Header}
-        <div className="card" style={{ padding: "48px 24px", textAlign: "center" }}>
-          <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>Nenhum ciclo registrado ainda</div>
-          <div className="page-sub" style={{ marginBottom: 18 }}>Registre o primeiro ciclo mensal para começar a acompanhar a evolução.</div>
-          <button className="btn btn-primary" style={{ display: "inline-flex" }} onClick={() => navegar("novociclo", p.id)}>
-            <Stethoscope size={16} /> Registrar primeiro ciclo
-          </button>
-        </div>
+        {Tabs}
+        {abaAtiva === "exames" && PainelExames}
+        {abaAtiva === "anamnese" && PainelAnamnese}
+        {abaAtiva === "protocolo" && PainelProtocolo}
+        {abaAtiva === "plano" && PainelPlano}
+        {abaAtiva === "ciclos" && (
+          <div className="card" style={{ padding: "48px 24px", textAlign: "center" }}>
+            <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>Nenhum ciclo registrado ainda</div>
+            <div className="page-sub" style={{ marginBottom: 18 }}>Registre o primeiro ciclo mensal para começar a acompanhar a evolução.</div>
+            <button className="btn btn-primary" style={{ display: "inline-flex" }} onClick={() => navegar("novociclo", p.id)}>
+              <Stethoscope size={16} /> Registrar primeiro ciclo
+            </button>
+          </div>
+        )}
         {editandoPaciente && <ModalEditarPaciente p={p} onSalvar={(d) => editarPaciente(p.id, d)} onFechar={() => setEditandoPaciente(false)} />}
         {modalDesativar && (
           <ModalDesativar paciente={p} onConfirmar={confirmarDesativacao} onFechar={() => setModalDesativar(false)} navegar={navegar} onBaixarPdfMeta={baixarPdfMeta} />
@@ -741,7 +791,14 @@ export default function Ficha({ pacienteId, navegar }) {
   return (
     <div className={animarSaindo ? "ficha-saindo" : ""}>
       {Header}
+      {Tabs}
 
+      {abaAtiva === "exames" && PainelExames}
+      {abaAtiva === "anamnese" && PainelAnamnese}
+        {abaAtiva === "protocolo" && PainelProtocolo}
+        {abaAtiva === "plano" && PainelPlano}
+
+      {abaAtiva === "ciclos" && (<>
       <div className="card" style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fit, minmax(140px, 1fr))", gap: isMobile ? 18 : 24, padding: "22px 24px", marginBottom: 28 }}>
         <Resumo label="Tempo" value={mesesTrat(p.inicio)} unit="meses" />
         <Resumo label="Peso atual" value={br(ultimoCiclo(p).peso)} unit="kg" sub={`−${br(perdaPeso(p))} kg`} />
@@ -833,9 +890,18 @@ export default function Ficha({ pacienteId, navegar }) {
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr" : "repeat(auto-fit, minmax(210px, 1fr))", gap: 18 }}>
                     <KV k="Suplementação" v={c.suplementacao} />
-                    <KV k="Local de aplicação" v={c.local} />
+                    <KV k="Onde aplicou" v={c.local} />
                     <KV k="Colaterais relatados" v={c.colaterais} />
                   </div>
+                  {c.localAplicacao && (
+                    <div style={{ display: "flex", alignItems: "center", gap: 16, padding: "12px 0", borderTop: "1px solid var(--line)" }}>
+                      <SilhuetaAplicacao valor={c.localAplicacao} somenteLeitura tamanho={130} />
+                      <div>
+                        <div style={{ fontSize: 11.5, color: "var(--inkFaint)", textTransform: "uppercase", letterSpacing: 0.5 }}>Local de aplicação</div>
+                        <div style={{ fontSize: 15, fontWeight: 700, color: "var(--brand)", marginTop: 3 }}>{nomeLocal(c.localAplicacao)}</div>
+                      </div>
+                    </div>
+                  )}
                   <KV k="Observações do médico" v={c.obs} />
                 </div>
               )}
@@ -843,6 +909,7 @@ export default function Ficha({ pacienteId, navegar }) {
           );
         })}
       </div>
+      </>)}
 
       {editandoCicloIdx !== null && (
         <ModalEditarCiclo ciclo={p.ciclos[editandoCicloIdx]} alturaBase={p.altura} onSalvar={(d) => editarCiclo(p.id, editandoCicloIdx, d)} onFechar={() => setEditandoCicloIdx(null)} />
