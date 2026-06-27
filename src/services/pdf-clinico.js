@@ -175,3 +175,87 @@ export async function baixarPdfExames({ paciente, exames, genero, config }) {
 export async function baixarPdfAnamnese({ paciente, dados, config }) {
   await gerar(htmlAnamnese({ paciente, dados, config }), `Anamnese_${slug(paciente?.nome || dados?.nomeCompleto)}.pdf`);
 }
+
+// ─── PDF do Plano de Acompanhamento ──────────────────────────
+export function htmlPlano({ paciente, plano, config }) {
+  if (!plano) return `<div>Nenhum plano definido.</div>`;
+
+  function addMeses(iso, m) {
+    const d = new Date(iso + "T12:00:00");
+    d.setMonth(d.getMonth() + m);
+    return d.toISOString().slice(0, 10);
+  }
+  const termino = addMeses(plano.inicio, plano.duracaoMeses);
+  const hoje = new Date().toISOString().slice(0, 10);
+  const totalDias = Math.max(1, Math.round((new Date(termino) - new Date(plano.inicio)) / 86400000));
+  const decorrido = Math.min(totalDias, Math.max(0, Math.round((new Date(hoje) - new Date(plano.inicio)) / 86400000)));
+  const pctTempo = Math.round((decorrido / totalDias) * 100);
+  const marcosConcluidos = (plano.marcos || []).filter((m) => m.concluido).length;
+
+  const marcosHtml = [...(plano.marcos || [])].sort((a, b) => (a.data || "").localeCompare(b.data || "")).map((m) => {
+    const atrasado = !m.concluido && m.data && m.data < hoje;
+    const cor = m.concluido ? "#1f9d6b" : atrasado ? "#e6a817" : "#5a6663";
+    const icone = m.concluido ? "✓" : atrasado ? "⏰" : "○";
+    return `
+      <tr style="page-break-inside:avoid">
+        <td style="padding:8px 12px;border-bottom:1px solid #eef2f2;width:24px;color:${cor};font-weight:700;font-size:14px">${icone}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #eef2f2;font-size:13px;font-weight:${m.concluido ? 400 : 600};color:${m.concluido ? "#8a9693" : "#27322f"};text-decoration:${m.concluido ? "line-through" : "none"}">${esc(m.titulo)}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #eef2f2;font-size:12px;color:#8a9693;white-space:nowrap">${m.data ? new Date(m.data + "T12:00:00").toLocaleDateString("pt-BR") : "—"}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #eef2f2;font-size:12px;color:#5a6663">${esc(m.desc || "")}</td>
+      </tr>`;
+  }).join("");
+
+  const barraProgresso = (pct, cor) => `
+    <div style="height:8px;background:#eef2f2;border-radius:99px;overflow:hidden;margin-top:6px">
+      <div style="width:${pct}%;height:100%;background:${cor};border-radius:99px"></div>
+    </div>`;
+
+  return `
+    <div style="width:720px;padding:32px;font-family:'Geist',Arial,sans-serif;color:#27322f;background:#fff;box-sizing:border-box">
+      ${cabecalho(config, "Plano de Acompanhamento")}
+      <div style="background:#f0f4f4;border-radius:10px;padding:16px 18px;margin-bottom:20px">
+        <div style="font-size:18px;font-weight:700">${esc(paciente?.nome || "")}</div>
+        <div style="font-size:13px;color:#5a6663;margin-top:4px">${esc(plano.titulo || "")}</div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
+        <div style="background:#f0f4f4;border-radius:9px;padding:14px 16px">
+          <div style="font-size:11px;color:#8a9693;text-transform:uppercase;letter-spacing:.4px">Início</div>
+          <div style="font-size:15px;font-weight:700;margin-top:3px">${fmtDataBr(plano.inicio)}</div>
+        </div>
+        <div style="background:#f0f4f4;border-radius:9px;padding:14px 16px">
+          <div style="font-size:11px;color:#8a9693;text-transform:uppercase;letter-spacing:.4px">Término previsto</div>
+          <div style="font-size:15px;font-weight:700;margin-top:3px">${fmtDataBr(termino)}</div>
+        </div>
+        <div style="background:#f0f4f4;border-radius:9px;padding:14px 16px">
+          <div style="font-size:11px;color:#8a9693;text-transform:uppercase;letter-spacing:.4px">Marcos</div>
+          <div style="font-size:15px;font-weight:700;margin-top:3px">${marcosConcluidos}/${(plano.marcos||[]).length} concluídos</div>
+        </div>
+      </div>
+
+      <div style="margin-bottom:20px">
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#5a6663;margin-bottom:4px">
+          <span>Progresso do tempo</span><span>${pctTempo}%</span>
+        </div>
+        ${barraProgresso(pctTempo, "#0d7a82")}
+      </div>
+
+      <div style="font-size:15px;font-weight:700;color:#0d7a82;margin-bottom:10px">Marcos do tratamento</div>
+      ${(plano.marcos||[]).length ? `
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead><tr>
+          <th style="padding:8px 12px;background:#f0f4f4;text-align:left;font-size:11px;color:#5a6663;border-bottom:1px solid #dde5e5"></th>
+          <th style="padding:8px 12px;background:#f0f4f4;text-align:left;font-size:11px;color:#5a6663;border-bottom:1px solid #dde5e5">Marco</th>
+          <th style="padding:8px 12px;background:#f0f4f4;text-align:left;font-size:11px;color:#5a6663;border-bottom:1px solid #dde5e5">Data</th>
+          <th style="padding:8px 12px;background:#f0f4f4;text-align:left;font-size:11px;color:#5a6663;border-bottom:1px solid #dde5e5">Descrição</th>
+        </tr></thead>
+        <tbody>${marcosHtml}</tbody>
+      </table>` : `<div style="color:#8a9693;font-size:13px">Nenhum marco definido.</div>`}
+
+      ${rodape(config)}
+    </div>`;
+}
+
+export async function baixarPdfPlano({ paciente, plano, config }) {
+  await gerar(htmlPlano({ paciente, plano, config }), `Plano_${(paciente?.nome || "paciente").replace(/[^a-zA-Z0-9]+/g, "_")}.pdf`);
+}
