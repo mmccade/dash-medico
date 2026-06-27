@@ -33,6 +33,12 @@ service cloud.firestore {
       match /pacientes/{pid} {
         allow read:  if isDono(uid) || isAdmin();
         allow write: if donoAtivo(database, uid);
+
+        // Subcoleções clínicas (anamnese, exames) — mesma regra de acesso do paciente
+        match /{subcol}/{docId} {
+          allow read:  if isDono(uid) || isAdmin();
+          allow write: if donoAtivo(database, uid);
+        }
       }
     }
     match /audit_logs/{logId} {
