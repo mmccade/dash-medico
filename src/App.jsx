@@ -21,6 +21,8 @@ import ContaPausada from "./screens/ContaPausada.jsx";
 import Sobre from "./screens/Sobre.jsx";
 import Alertas from "./screens/Alertas.jsx";
 import Relatorio from "./screens/Relatorio.jsx";
+import ExamesGlobal from "./screens/ExamesGlobal.jsx";
+import AnamneseGlobal from "./screens/AnamneseGlobal.jsx";
 import ModalPlanos from "./components/ModalPlanos.jsx";
 
 function TelaCarregando() {
@@ -55,6 +57,8 @@ function AppMedico() {
       {tela === "sobre"        && <Sobre />}
       {tela === "alertas"      && <Alertas navegar={navegar} />}
       {tela === "relatorio"    && <Relatorio />}
+      {tela === "exames"       && <ExamesGlobal navegar={navegar} />}
+      {tela === "anamnese"     && <AnamneseGlobal navegar={navegar} />}
     </Shell>
   );
 }
