@@ -1,14 +1,16 @@
 // src/screens/Relatorio.jsx
 // Período personalizado, PDF, aba Metas Batidas, sem mensagem motivacional
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   Calendar, TrendingDown, UserPlus, UserMinus, Activity,
-  Trophy, FileText, ChevronDown, X
+  Trophy, FileText, ChevronDown, X, FlaskConical, ClipboardList
 } from "lucide-react";
 import { useStore } from "../lib/store.jsx";
+import { useAuth } from "../lib/auth.jsx";
 import { br, faixaEtaria, fmtData, imc, primeiroCiclo, ultimoCiclo } from "../lib/utils.js";
 import { gerarPdfRelatorio } from "../services/pdf.js";
+import { contarClinico } from "../services/db-exames.js";
 
 // ── Períodos pré-definidos ──────────────────────────────────────
 const PERIODOS_PRESET = [
@@ -268,11 +270,24 @@ function MetasBatidas({ pacientes }) {
 // ── Tela principal ───────────────────────────────────────────────
 export default function Relatorio() {
   const { pacientes, config } = useStore();
+  const { user } = useAuth();
   const [periodo, setPeriodo] = useState("30d");
   const [dataInicio, setDataInicio] = useState("");
   const [dataFim, setDataFim] = useState("");
   const [aba, setAba] = useState("resumo"); // "resumo" | "metas"
   const [gerando, setGerando] = useState(false);
+  const [clinico, setClinico] = useState(null); // { totalExames, totalAnamneses }
+
+  useEffect(() => {
+    if (!user) return;
+    const ids = pacientes.filter((p) => !p.excluidoEm).map((p) => p.id);
+    if (ids.length === 0) { setClinico({ totalExames: 0, totalAnamneses: 0 }); return; }
+    let vivo = true;
+    contarClinico(user.uid, ids)
+      .then((r) => { if (vivo) setClinico(r); })
+      .catch((e) => console.warn("contarClinico:", e));
+    return () => { vivo = false; };
+  }, [user, pacientes]);
 
   // Calcula intervalo efetivo
   const { limite, hoje, labelPeriodo } = useMemo(() => {
@@ -446,6 +461,12 @@ export default function Relatorio() {
             <Card Icon={UserMinus}    label="Desativados"        valor={dados.inativos} cor="var(--warn)" />
             <Card Icon={Activity}     label="Ciclos no período"  valor={dados.ciclos}   cor="var(--brand)" />
             <Card Icon={TrendingDown} label="Peso eliminado total" valor={`${br(dados.pesoTotal.toFixed(1))} kg`} cor="var(--brand)" sub="Soma de todos os pacientes" />
+          </div>
+
+          {/* Totais clínicos brutos (todo o histórico) */}
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+            <Card Icon={FlaskConical}   label="Exames lidos"          valor={clinico ? clinico.totalExames : "…"}    cor="var(--brand)" sub="Total acumulado" />
+            <Card Icon={ClipboardList}  label="Anamneses preenchidas" valor={clinico ? clinico.totalAnamneses : "…"} cor="var(--good)"  sub="Total acumulado" />
           </div>
 
           {/* Faixas etárias */}
