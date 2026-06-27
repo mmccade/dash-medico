@@ -28,7 +28,7 @@ export default function NovoCiclo({ pacienteId, navegar }) {
     data: hoje,
     peso: "", gordura: "", massaMagra: "", visceral: "",
     unidade: "MG", d1: "", d2: "", d3: "", d4: "",
-    local: "Casa", localAplicacao: "", suplementacao: "", colaterais: "", obs: "",
+    local: "Casa", localAplicacao: "", medicacao: "", suplementacao: "", colaterais: "", obs: "",
   });
 
   if (!p) { navegar("pacientes"); return null; }
@@ -55,7 +55,7 @@ export default function NovoCiclo({ pacienteId, navegar }) {
       peso: f.peso, gordura: f.gordura, massaMagra: f.massaMagra, visceral: f.visceral,
       unidade: f.unidade,
       doses: [f.d1, f.d2, f.d3, f.d4].map(parseNum),
-      local: f.local, localAplicacao: f.localAplicacao, suplementacao: f.suplementacao, colaterais: f.colaterais, obs: f.obs,
+      local: f.local, localAplicacao: f.localAplicacao, medicacao: f.medicacao, suplementacao: f.suplementacao, colaterais: f.colaterais, obs: f.obs,
     };
     const { data, errors } = validateCiclo(rawCiclo);
     if (errors.length) { toast(primeiroErro(errors)); return; }
@@ -151,7 +151,10 @@ export default function NovoCiclo({ pacienteId, navegar }) {
           </p>
           <SilhuetaAplicacao valor={f.localAplicacao} onChange={(v) => set("localAplicacao", v)} />
         </div>
-        <CampoTexto label="Suplementação" v={f.suplementacao} on={(v) => set("suplementacao", v)} ph="Ex: vitamina D, creatina…" max={500} />
+        <CampoTexto label="Medicação prescrita" v={f.medicacao} on={(v) => set("medicacao", v)} ph="Ex: Tirzepatida 5mg/semana + Metformina 500mg 2x/dia…" max={1000} />
+        <div style={{ marginTop: 14 }}>
+          <CampoTexto label="Suplementação" v={f.suplementacao} on={(v) => set("suplementacao", v)} ph="Ex: vitamina D 5.000 UI, magnésio quelato…" max={500} />
+        </div>
       </Secao>
 
       <Secao titulo="Observações clínicas">
