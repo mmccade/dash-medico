@@ -14,7 +14,7 @@ import { useAuth } from "../lib/auth.jsx";
 import { useStore } from "../lib/store.jsx";
 import { useToast } from "../lib/toast.jsx";
 import { auth } from "../services/firebase.js";
-import { BIOMARCADORES, CATEGORIAS_EXAME, classificar, getInterpretacao } from "../lib/biomarcadores.js";
+import { BIOMARCADORES, CATEGORIAS_EXAME, classificar, getInterpretacao, getSugestoes } from "../lib/biomarcadores.js";
 import { salvarExame, listarExames, excluirExame } from "../services/db-exames.js";
 import { baixarPdfExames } from "../services/pdf-clinico.js";
 import SeletorPaciente from "../components/SeletorPaciente.jsx";
@@ -40,6 +40,27 @@ function BadgeStatus({ status }) {
     <span style={{ display: "inline-flex", alignItems: "center", gap: 3, fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 99, background: s.bg, border: `1px solid ${s.border}`, color: s.color }}>
       {ICON_STATUS[status]} {LABEL_STATUS[status]}
     </span>
+  );
+}
+
+function SugestoesMarcador({ nome, status }) {
+  if (!status || status === "normal") return null;
+  const sugs = getSugestoes(nome, status);
+  if (!sugs || !sugs.length) return null;
+  return (
+    <div style={{ marginTop: 8, padding: "8px 12px", background: status === "baixo" ? "#fff8e6" : "#fdecec", borderRadius: 8, border: `1px solid ${status === "baixo" ? "#e0a800" : "#d64545"}` }}>
+      <div style={{ fontSize: 11, fontWeight: 700, color: status === "baixo" ? "#9a6700" : "#b91c1c", marginBottom: 6 }}>
+        💊 Sugestão de suporte nutricional — {status === "baixo" ? "nível baixo" : "nível elevado"}
+      </div>
+      <ul style={{ margin: 0, padding: "0 0 0 14px", listStyle: "disc" }}>
+        {sugs.map((s, i) => (
+          <li key={i} style={{ fontSize: 11.5, color: "#374151", marginBottom: 2 }}>{s}</li>
+        ))}
+      </ul>
+      <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 6, fontStyle: "italic" }}>
+        ⚕️ Sugestão de referência. A conduta terapêutica é de responsabilidade exclusiva do médico.
+      </div>
+    </div>
   );
 }
 
@@ -250,6 +271,11 @@ function CardExame({ exame, genero, aberto, onToggle, onExcluir, exameAnterior }
                         <div style={{ fontSize: 14, fontWeight: 600 }}>{m.valor} {bio?.unidade && <span style={{ fontSize: 11, fontWeight: 400, color: "var(--inkFaint)" }}>{bio.unidade}</span>}</div>
                         <div><BadgeStatus status={stAtual} /></div>
                       </div>
+                      {stAtual && stAtual !== "normal" && (
+                        <div style={{ marginTop: 4 }}>
+                          <SugestoesMarcador nome={m.nome} status={stAtual} />
+                        </div>
+                      )}
                     );
                   })}
                 </div>
