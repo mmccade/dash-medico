@@ -270,12 +270,10 @@ function CardExame({ exame, genero, aberto, onToggle, onExcluir, exameAnterior }
                         </div>
                         <div style={{ fontSize: 14, fontWeight: 600 }}>{m.valor} {bio?.unidade && <span style={{ fontSize: 11, fontWeight: 400, color: "var(--inkFaint)" }}>{bio.unidade}</span>}</div>
                         <div><BadgeStatus status={stAtual} /></div>
-                      </div>
-                      {stAtual && stAtual !== "normal" && (
-                        <div style={{ marginTop: 4 }}>
+                        <div style={{ gridColumn: "1 / -1" }}>
                           <SugestoesMarcador nome={m.nome} status={stAtual} />
                         </div>
-                      )}
+                      </div>
                     );
                   })}
                 </div>
