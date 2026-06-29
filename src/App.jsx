@@ -21,6 +21,7 @@ import ContaPausada from "./screens/ContaPausada.jsx";
 import Sobre from "./screens/Sobre.jsx";
 import Alertas from "./screens/Alertas.jsx";
 import Relatorio from "./screens/Relatorio.jsx";
+import Sugestoes from "./screens/Sugestoes.jsx";
 import ExamesGlobal from "./screens/ExamesGlobal.jsx";
 import AnamneseGlobal from "./screens/AnamneseGlobal.jsx";
 import ModalPlanos from "./components/ModalPlanos.jsx";
@@ -36,9 +37,11 @@ function TelaCarregando() {
 function AppMedico() {
   const [tela, setTela] = useState("dashboard");
   const [pacienteId, setPacienteId] = useState(null);
+  const [opcoes, setOpcoes] = useState({});
 
-  const navegar = (novaTela, pid) => {
+  const navegar = (novaTela, pid, extra) => {
     if (pid !== undefined) setPacienteId(pid);
+    setOpcoes(extra || {});
     setTela(novaTela);
     window.scrollTo(0, 0);
   };
@@ -47,7 +50,7 @@ function AppMedico() {
     <Shell tela={tela} navegar={navegar} onLogout={() => sair()}>
       {tela === "dashboard"    && <Dashboard navegar={navegar} />}
       {tela === "pacientes"    && <Pacientes navegar={navegar} />}
-      {tela === "ficha"        && <Ficha pacienteId={pacienteId} navegar={navegar} />}
+      {tela === "ficha"        && <Ficha pacienteId={pacienteId} navegar={navegar} abaInicial={opcoes.abaInicial} />}
       {tela === "evolucao"     && <Evolucao pacienteIdInicial={pacienteId} />}
       {tela === "novociclo"    && <NovoCiclo pacienteId={pacienteId} navegar={navegar} />}
       {tela === "novopaciente" && <NovoPaciente navegar={navegar} />}
@@ -55,6 +58,7 @@ function AppMedico() {
       {tela === "config"       && <Config />}
       {tela === "meuperfil"    && <MeuPerfil />}
       {tela === "sobre"        && <Sobre />}
+      {tela === "sugestoes"    && <Sugestoes />}
       {tela === "alertas"      && <Alertas navegar={navegar} />}
       {tela === "relatorio"    && <Relatorio />}
       {tela === "exames"       && <ExamesGlobal navegar={navegar} />}
