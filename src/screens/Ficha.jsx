@@ -6,7 +6,8 @@
 // + PDF de meta batida disponível quando bater
 
 import { useState, useEffect } from "react";
-import { ArrowLeft, Trash2, Stethoscope, FileText, ChevronDown, Pencil, X, Loader2, Check, Trophy, Activity, FlaskConical, ClipboardList, Pill, Target, Clock, GitCompare, Plus, Minus } from "lucide-react";
+import { ArrowLeft, Trash2, Stethoscope, FileText, ChevronDown, Pencil, X, Loader2, Check, Trophy, Activity, FlaskConical, ClipboardList, Pill, Target, Clock, GitCompare, Plus, Minus, Sparkles } from "lucide-react";
+import PlanejadorSuplementos from "../components/PlanejadorSuplementos.jsx";
 import Exames from "./Exames.jsx";
 import ExamesComparacao from "./ExamesComparacao.jsx";
 import Anamnese from "./Anamnese.jsx";
@@ -17,6 +18,7 @@ import { useStore } from "../lib/store.jsx";
 import { useToast } from "../lib/toast.jsx";
 import { imc, br, fmtData, primeiroCiclo, ultimoCiclo, perdaPeso, mesesTrat, parseNum, imcMeta, metaPesoBatida, metaVisceralBatida, massaMagraKg, gerarTimeline, gerarResumo, progressoMetaFinal, deltaMetaMes, metaDoMes } from "../lib/utils.js";
 import { listarExames } from "../services/db-exames.js";
+import { getSugestoes } from "../lib/biomarcadores.js";
 import { useAuth } from "../lib/auth.jsx";
 import { Avatar, Toggle } from "../components/ui.jsx";
 import { LinhaChart } from "../components/charts.jsx";
@@ -802,7 +804,8 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
         { id: "exames",    label: "Exames",      Icon: FlaskConical },
         { id: "timeline",  label: "Timeline",    Icon: Clock },
         { id: "anamnese",  label: "Anamnese",    Icon: ClipboardList },
-        { id: "protocolo", label: "Medicamentos", Icon: Pill },
+        { id: "protocolo",    label: "Medicamentos", Icon: Pill },
+        { id: "suplementos",  label: "Suplementos",  Icon: Sparkles },
       ].map((t) => (
         <button key={t.id} onClick={() => { setAbaAtiva(t.id); setSubViewExames("lista"); }} style={{
           flex: "0 0 auto",
@@ -888,6 +891,58 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
   );
   const PainelAnamnese = <Anamnese pacienteId={p.id} pacienteNome={p.nome} navegar={navegar} />;
   const PainelProtocolo = <Protocolo pacienteId={p.id} pacienteNome={p.nome} />;
+
+  // Sugestões de suplemento baseadas nos últimos exames do paciente
+  const sugestoesDosExames = (() => {
+    if (!examesLista.length) return [];
+    const ultimo = examesLista[examesLista.length - 1];
+    const sugs = new Set();
+    (ultimo.marcadores || []).forEach((m) => {
+      if (!m.status || m.status === "normal") return;
+      const lista = getSugestoes(m.nome, m.status) || [];
+      lista.forEach((s) => sugs.add(s.split(" (")[0]));
+    });
+    return [...sugs].slice(0, 6);
+  })();
+
+  const PainelSuplemento = (
+    <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {sugestoesDosExames.length > 0 && (
+        <div style={{ background: "linear-gradient(135deg, var(--brandSoft,#d1f5e8), var(--surface))", border: "1px solid var(--brand)22", borderRadius: 14, padding: "16px 18px" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
+            <Sparkles size={15} color="var(--brand)" />
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: "var(--brand)", textTransform: "uppercase", letterSpacing: ".4px" }}>
+              Sugestões baseadas nos últimos exames
+            </span>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+            {sugestoesDosExames.map((s) => (
+              <button key={s} onClick={async () => {
+                const atual = p.suplementosProtocolo || [];
+                if (!atual.includes(s)) {
+                  await editarPaciente(p.id, { suplementosProtocolo: [...atual, s] });
+                }
+              }} style={{ fontSize: 12.5, padding: "5px 12px", borderRadius: 99, background: "var(--surface)", border: "1px solid var(--brand)", color: "var(--brand)", fontWeight: 600, cursor: "pointer" }}>
+                + {s}
+              </button>
+            ))}
+          </div>
+          <div style={{ fontSize: 11, color: "var(--inkFaint)", marginTop: 10, fontStyle: "italic" }}>
+            Clique para adicionar ao protocolo. Conduta sob responsabilidade do médico.
+          </div>
+        </div>
+      )}
+
+      <div className="card" style={{ padding: "18px 20px" }}>
+        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>Protocolo de suplementação</div>
+        <PlanejadorSuplementos
+          valor={p.suplementosProtocolo || []}
+          onChange={async (lista) => await editarPaciente(p.id, { suplementosProtocolo: lista })}
+          sugestoesDepleção={sugestoesDosExames}
+        />
+      </div>
+    </div>
+  );
   const gerarPdfPlano = async () => {
     toast("Gerando PDF do plano…");
     try { await baixarPdfPlano({ paciente: p, plano: p.plano, config }); toast("PDF gerado"); }
@@ -915,6 +970,7 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
         {abaAtiva === "exames" && PainelExames}
         {abaAtiva === "anamnese" && PainelAnamnese}
         {abaAtiva === "protocolo" && PainelProtocolo}
+        {abaAtiva === "suplementos" && PainelSuplemento}
         {abaAtiva === "plano" && PainelPlano}
         {abaAtiva === "timeline" && PainelTimeline}
         {abaAtiva === "ciclos" && (
@@ -956,9 +1012,10 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
 
       {abaAtiva === "exames" && PainelExames}
       {abaAtiva === "anamnese" && PainelAnamnese}
-        {abaAtiva === "protocolo" && PainelProtocolo}
-        {abaAtiva === "plano" && PainelPlano}
-        {abaAtiva === "timeline" && PainelTimeline}
+      {abaAtiva === "protocolo" && PainelProtocolo}
+      {abaAtiva === "suplementos" && PainelSuplemento}
+      {abaAtiva === "plano" && PainelPlano}
+      {abaAtiva === "timeline" && PainelTimeline}
 
       {abaAtiva === "ciclos" && (<>
 
