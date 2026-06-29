@@ -70,6 +70,7 @@ export async function salvarConfigUsuario(uid, config) {
   await updateDoc(doc(db, "usuarios", uid), {
     clinica: config.clinica, medico: config.medico, crm: config.crm,
     logo: config.logo || null, murevNoPdf: config.murevNoPdf !== false,
+    protocolosSuplementacao: config.protocolosSuplementacao || [],
   });
 }
 
