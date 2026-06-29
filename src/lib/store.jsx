@@ -53,6 +53,7 @@ export function StoreProvider({ children }) {
         logo:       perfil.logo       || null,
         murevNoPdf: perfil.murevNoPdf !== false,
         pesoMeta:   perfil.pesoMeta   || null,
+        protocolosSuplementacao: perfil.protocolosSuplementacao || [],
       });
     }
   }, [usandoFirebase, perfil]);
@@ -179,6 +180,37 @@ export function StoreProvider({ children }) {
     }
   }, [usandoFirebase, user, setPerfil]);
 
+  // ── Biblioteca de protocolos de suplementação (nível médico) ──
+  // Persistidos junto ao config do usuário, reutilizáveis em qualquer paciente/ciclo.
+  const persistirProtocolos = useCallback(async (lista) => {
+    const nova = { ...config, protocolosSuplementacao: lista };
+    setConfig(nova);
+    if (usandoFirebase) {
+      await dbApi.salvarConfigUsuario(user.uid, nova);
+      setPerfil((pf) => ({ ...pf, protocolosSuplementacao: lista }));
+    }
+  }, [config, usandoFirebase, user, setPerfil]);
+
+  const salvarProtocolo = useCallback(async (protocolo) => {
+    const lista = config.protocolosSuplementacao || [];
+    const id = protocolo.id || `prot_${Date.now()}`;
+    const registro = {
+      id,
+      nome: protocolo.nome || "Protocolo sem nome",
+      itens: protocolo.itens || [],
+      criadoEm: protocolo.criadoEm || new Date().toISOString(),
+      atualizadoEm: new Date().toISOString(),
+    };
+    const existe = lista.some((p) => p.id === id);
+    const nova = existe ? lista.map((p) => (p.id === id ? registro : p)) : [...lista, registro];
+    await persistirProtocolos(nova);
+    return registro;
+  }, [config, persistirProtocolos]);
+
+  const removerProtocolo = useCallback(async (id) => {
+    await persistirProtocolos((config.protocolosSuplementacao || []).filter((p) => p.id !== id));
+  }, [config, persistirProtocolos]);
+
   const exportarCSV = useCallback(() => {
     const linhas = [];
     const cab = ["Nome","Idade","Sexo","Altura(m)","Inicio","Objetivo","Condicoes","Ativo",
@@ -216,6 +248,7 @@ export function StoreProvider({ children }) {
       toggleAtivo, desativarPaciente, ativarEmMassa, desativarEmMassa,
       moverParaLixeira, restaurarDaLixeira, excluirPermanente,
       salvarConfig, exportarCSV,
+      salvarProtocolo, removerProtocolo,
     }}>
       {children}
     </StoreCtx.Provider>
