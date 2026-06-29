@@ -20,9 +20,10 @@ export default function Dashboard({ navegar }) {
   const ativos = pacientes.filter((p) => p.ativo);
   const comCiclo = ativos.filter((p) => p.ciclos.length > 0);
   const novos = pacientes.filter((p) => novoEsteMes(p.inicio));
-  const mIdade = pacientes.length ? Math.round(pacientes.reduce((s, p) => s + p.idade, 0) / pacientes.length) : 0;
-  const pesos = comCiclo.map((p) => ultimoCiclo(p).peso);
-  const mPeso = pesos.length ? +(pesos.reduce((a, b) => a + b, 0) / pesos.length).toFixed(1) : 0;
+  const idadesValidas = pacientes.map((p) => p.idade).filter((i) => i != null && i > 0);
+  const mIdade = idadesValidas.length ? Math.round(idadesValidas.reduce((s, i) => s + i, 0) / idadesValidas.length) : 0;
+  const pesos = comCiclo.map((p) => ultimoCiclo(p).peso).filter((v) => v != null && v !== "");
+  const mPeso = pesos.length ? +(pesos.reduce((a, b) => a + Number(b), 0) / pesos.length).toFixed(1) : 0;
   const perdas = ativos.filter((p) => p.ciclos.length > 1).map(perdaPeso);
   const mPerda = perdas.length ? +(perdas.reduce((a, b) => a + b, 0) / perdas.length).toFixed(1) : 0;
 
