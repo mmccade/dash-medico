@@ -18,6 +18,19 @@ function getAdminAuth() {
   return getAuth();
 }
 
+// Verifica o token Firebase do header Authorization e retorna o usuário (ou null).
+async function verificarAuth(req, adminAuth) {
+  const header = req.headers.authorization || "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : null;
+  if (!token) return null;
+  try {
+    return await adminAuth.verifyIdToken(token);
+  } catch (e) {
+    console.warn("[change-email] token inválido:", e.message);
+    return null;
+  }
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Método não permitido." });
 
@@ -33,6 +46,16 @@ export default async function handler(req, res) {
 
   try {
     const adminAuth = getAdminAuth();
+
+    // Auth obrigatória: só o próprio dono da conta pode trocar o email dela.
+    const usuarioToken = await verificarAuth(req, adminAuth);
+    if (!usuarioToken) {
+      return res.status(401).json({ error: "Não autorizado." });
+    }
+    const emailToken = (usuarioToken.email || "").trim().toLowerCase();
+    if (emailToken !== emailAtual) {
+      return res.status(403).json({ error: "Você só pode trocar o email da própria conta." });
+    }
 
     // Verifica se o usuário atual existe (case-insensitive)
     let usuario;
