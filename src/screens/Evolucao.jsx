@@ -1,4 +1,4 @@
-// src/screens/Evolucao.jsx
+\// src/screens/Evolucao.jsx
 // + Substitui o <select> por SeletorPaciente (abas Ativos/Inativos/Todos + busca + faixa idade)
 // + Mantém o fluxo de comparação de ciclos e PDF
 
@@ -91,12 +91,14 @@ export default function Evolucao({ pacienteIdInicial }) {
   const serieFiltrada = serie.slice(ia, ib + 1);
 
   const Stat = ({ label, v1, v2, unit, bom }) => {
-    const diff = +(v2 - v1).toFixed(1);
+    const n1 = Number(v1), n2 = Number(v2);
+    if (!isFinite(n1) || !isFinite(n2)) return null;
+    const diff = +(n2 - n1).toFixed(1);
     const positivo = bom === "baixo" ? diff < 0 : diff > 0;
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <span style={{ fontSize: 12, color: "var(--inkFaint)" }}>{label}</span>
-        <span style={{ fontSize: 22, fontWeight: 700, letterSpacing: -0.3 }}>{br(v2.toFixed(1))}{unit}</span>
+        <span style={{ fontSize: 22, fontWeight: 700, letterSpacing: -0.3 }}>{br(n2.toFixed(1))}{unit}</span>
         <span style={{ fontSize: 13, color: diff === 0 ? "var(--inkFaint)" : positivo ? "var(--good)" : "var(--bad, #e74c3c)", fontWeight: 600 }}>
           {diff > 0 ? "+" : ""}{br(diff.toFixed(1))}{unit} desde o início
         </span>
@@ -155,14 +157,14 @@ export default function Evolucao({ pacienteIdInicial }) {
               <label style={{ fontSize: 12, color: "var(--inkFaint)", display: "block", marginBottom: 5 }}>Ciclo inicial</label>
               <select value={ia} onChange={(e) => setA(+e.target.value)}
                 style={{ padding: "8px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13, fontWeight: 500 }}>
-                {ciclos.map((c, i) => <option key={i} value={i}>Mês {c.mes} — {br(c.peso.toFixed(1))} kg</option>)}
+                {ciclos.map((c, i) => <option key={i} value={i}>Mês {c.mes}{c.peso != null && c.peso !== "" ? ` — ${br(Number(c.peso).toFixed(1))} kg` : ""}</option>)}
               </select>
             </div>
             <div>
               <label style={{ fontSize: 12, color: "var(--inkFaint)", display: "block", marginBottom: 5 }}>Ciclo final</label>
               <select value={ib} onChange={(e) => setB(+e.target.value)}
                 style={{ padding: "8px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13, fontWeight: 500 }}>
-                {ciclos.map((c, i) => <option key={i} value={i}>Mês {c.mes} — {br(c.peso.toFixed(1))} kg</option>)}
+                {ciclos.map((c, i) => <option key={i} value={i}>Mês {c.mes}{c.peso != null && c.peso !== "" ? ` — ${br(Number(c.peso).toFixed(1))} kg` : ""}</option>)}
               </select>
             </div>
           </div>
