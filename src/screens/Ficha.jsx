@@ -6,15 +6,18 @@
 // + PDF de meta batida disponível quando bater
 
 import { useState, useEffect } from "react";
-import { ArrowLeft, Trash2, Stethoscope, FileText, ChevronDown, Pencil, X, Loader2, Check, Trophy, Activity, FlaskConical, ClipboardList, Pill, Target } from "lucide-react";
+import { ArrowLeft, Trash2, Stethoscope, FileText, ChevronDown, Pencil, X, Loader2, Check, Trophy, Activity, FlaskConical, ClipboardList, Pill, Target, Clock, GitCompare, Plus, Minus } from "lucide-react";
 import Exames from "./Exames.jsx";
+import ExamesComparacao from "./ExamesComparacao.jsx";
 import Anamnese from "./Anamnese.jsx";
 import Protocolo from "./Protocolo.jsx";
 import PlanoAcompanhamento from "./PlanoAcompanhamento.jsx";
 import SilhuetaAplicacao, { nomeLocal } from "../components/SilhuetaAplicacao.jsx";
 import { useStore } from "../lib/store.jsx";
 import { useToast } from "../lib/toast.jsx";
-import { imc, br, fmtData, primeiroCiclo, ultimoCiclo, perdaPeso, mesesTrat, parseNum, imcMeta, metaPesoBatida, metaVisceralBatida, massaMagraKg } from "../lib/utils.js";
+import { imc, br, fmtData, primeiroCiclo, ultimoCiclo, perdaPeso, mesesTrat, parseNum, imcMeta, metaPesoBatida, metaVisceralBatida, massaMagraKg, gerarTimeline, gerarResumo, progressoMetaFinal, deltaMetaMes, metaDoMes } from "../lib/utils.js";
+import { listarExames } from "../services/db-exames.js";
+import { useAuth } from "../lib/auth.jsx";
 import { Avatar, Toggle } from "../components/ui.jsx";
 import { LinhaChart } from "../components/charts.jsx";
 import { useIsMobile } from "../components/Shell.jsx";
@@ -387,11 +390,19 @@ function ModalEditarPaciente({ p, onSalvar, onFechar }) {
     pesoMeta: p.pesoMeta ? numeroParaMascara(p.pesoMeta, 4, 1) : "",
     visceralMeta: p.visceralMeta != null ? String(p.visceralMeta) : "",
   });
+  // Metas mensais: [{ mes: "Jun/26", peso: "85,0" }, ...]
+  const [metasMensais, setMetasMensais] = useState(
+    (p.metasMensais || []).map((m) => ({ mes: m.mes, peso: numeroParaMascara(m.peso, 4, 1) }))
+  );
   const [salvando, setSalvando] = useState(false);
   const [etapa, setEtapa] = useState("form"); // "form" | "revisar" | "sucesso"
   const [dadosValidados, setDadosValidados] = useState(null);
   const toast = useToast();
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
+
+  const addMetaMes = () => setMetasMensais((ms) => [...ms, { mes: "", peso: "" }]);
+  const setMetaMes = (i, k, v) => setMetasMensais((ms) => ms.map((m, j) => j === i ? { ...m, [k]: v } : m));
+  const removeMetaMes = (i) => setMetasMensais((ms) => ms.filter((_, j) => j !== i));
 
   const pesoMetaNum = parseNum(f.pesoMeta);
   const altNum = parseNum(f.altura);
@@ -403,7 +414,10 @@ function ModalEditarPaciente({ p, onSalvar, onFechar }) {
     if (errors.length) { toast(primeiroErro(errors)); return; }
     const pesoMeta = parseNum(f.pesoMeta) || null;
     const visceralMeta = parseNum(f.visceralMeta) || null;
-    setDadosValidados({ ...data, pesoMeta, visceralMeta });
+    const metasMensaisLimpas = metasMensais
+      .filter((m) => m.mes.trim() && m.peso)
+      .map((m) => ({ mes: m.mes.trim(), peso: parseNum(m.peso) }));
+    setDadosValidados({ ...data, pesoMeta, visceralMeta, metasMensais: metasMensaisLimpas });
     setEtapa("revisar");
   };
 
@@ -509,6 +523,30 @@ function ModalEditarPaciente({ p, onSalvar, onFechar }) {
             </div>
           </div>
 
+          {/* Metas mensais */}
+          <div style={{ marginBottom: 4 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+              <label style={{ fontSize: 13, fontWeight: 600 }}>Metas mensais de peso</label>
+              <button type="button" onClick={addMetaMes} className="btn btn-ghost" style={{ fontSize: 12, padding: "5px 12px", gap: 5 }}>
+                <Plus size={13} /> Adicionar mês
+              </button>
+            </div>
+            {metasMensais.length === 0 && (
+              <div style={{ fontSize: 12.5, color: "var(--inkFaint)", fontStyle: "italic" }}>Nenhuma meta mensal definida.</div>
+            )}
+            {metasMensais.map((m, i) => (
+              <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 8, marginBottom: 8, alignItems: "center" }}>
+                <input value={m.mes} onChange={(e) => setMetaMes(i, "mes", e.target.value)}
+                  placeholder="Jun/26" style={inpStyle} maxLength={8} />
+                <InputDecimal value={m.peso} onChange={(v) => setMetaMes(i, "peso", v)}
+                  digitos={4} decimais={1} placeholder="85,0" style={inpStyle} />
+                <button type="button" onClick={() => removeMetaMes(i)} style={{ color: "var(--bad,#c0392b)", padding: 4, borderRadius: 7 }}>
+                  <Minus size={15} />
+                </button>
+              </div>
+            ))}
+          </div>
+
           <div style={{ display: "flex", gap: 10 }}>
             <button onClick={onFechar} className="btn btn-ghost" style={{ flex: 1, justifyContent: "center" }}>Cancelar</button>
             <button onClick={irParaConfirmacao} className="btn btn-primary" style={{ flex: 1, justifyContent: "center" }}>
@@ -553,8 +591,9 @@ function Delta({ atual, anterior, bom = "baixo", unit = "" }) {
 }
 
 // ─── Tela principal ───────────────────────────────────────────
-export default function Ficha({ pacienteId, navegar }) {
+export default function Ficha({ pacienteId, navegar, abaInicial }) {
   const { getPaciente, config, editarCiclo, excluirCiclo, editarPaciente, toggleAtivo, desativarPaciente, moverParaLixeira } = useStore();
+  const { user } = useAuth();
   const toast = useToast();
   const isMobile = useIsMobile();
   const p = getPaciente(pacienteId);
@@ -565,7 +604,17 @@ export default function Ficha({ pacienteId, navegar }) {
   const [modalPdf, setModalPdf] = useState(false);
   const [modalDesativar, setModalDesativar] = useState(false);
   const [animarSaindo, setAnimarSaindo] = useState(false);
-  const [abaAtiva, setAbaAtiva] = useState("ciclos"); // ciclos | exames | anamnese
+  const [abaAtiva, setAbaAtiva] = useState(abaInicial || "ciclos");
+  const [subViewExames, setSubViewExames] = useState("lista"); // "lista" | "comparar"
+  const [examesLista, setExamesLista] = useState([]);
+
+  // Carrega exames do paciente para timeline, resumo e comparação
+  useEffect(() => {
+    if (!user?.uid || !pacienteId) return;
+    listarExames(user.uid, pacienteId)
+      .then(setExamesLista)
+      .catch(() => {});
+  }, [user?.uid, pacienteId]);
 
   if (!p) { navegar("pacientes"); return null; }
 
@@ -705,10 +754,10 @@ export default function Ficha({ pacienteId, navegar }) {
         <div style={{ marginBottom: 16, padding: "14px 18px", background: "var(--surface2)", borderRadius: 12 }}>
           <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12.5, color: "var(--inkFaint)", marginBottom: 8 }}>
             <span>Progresso para a meta ({br(meta)} kg)</span>
-            <span style={{ fontWeight: 700, color: "var(--brand)" }}>{progresso}%</span>
+            <span style={{ fontWeight: 700, color: "var(--brand)" }}>{progressoMeta}%</span>
           </div>
           <div style={{ height: 8, background: "var(--line)", borderRadius: 99, overflow: "hidden" }}>
-            <div style={{ width: `${progresso}%`, height: "100%", background: "var(--brand)", borderRadius: 99, transition: "width 0.4s" }} />
+            <div style={{ width: `${progressoMeta}%`, height: "100%", background: "var(--brand)", borderRadius: 99, transition: "width 0.4s" }} />
           </div>
         </div>
       )}
@@ -720,31 +769,103 @@ export default function Ficha({ pacienteId, navegar }) {
     </>
   );
 
+  const genero = p.sexo === "Masculino" ? "M" : "F";
+  const resumoTexto = gerarResumo(p, examesLista);
+  const timeline = gerarTimeline(p, examesLista);
+  const progressoMeta = progressoMetaFinal(p);
+
+  const CardResumo = resumoTexto ? (
+    <div style={{ background: "linear-gradient(135deg, var(--brandSoft,#d1f5e8), var(--surface))", border: "1px solid var(--brand,#0d7a82)22", borderRadius: 14, padding: "16px 20px", marginBottom: 20, display: "flex", gap: 14, alignItems: "flex-start" }}>
+      <div style={{ fontSize: 22, flexShrink: 0, marginTop: 2 }}>🩺</div>
+      <div>
+        <div style={{ fontSize: 11.5, fontWeight: 700, color: "var(--brand)", textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 5 }}>Resumo clínico</div>
+        <div style={{ fontSize: 13.5, color: "var(--ink)", lineHeight: 1.65 }}>{resumoTexto}</div>
+        {progressoMeta != null && (
+          <div style={{ marginTop: 12 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, color: "var(--inkFaint)", marginBottom: 4 }}>
+              <span>Progresso até a meta</span><span style={{ fontWeight: 700, color: "var(--brand)" }}>{progressoMeta}%</span>
+            </div>
+            <div style={{ height: 6, background: "var(--line)", borderRadius: 99, overflow: "hidden" }}>
+              <div style={{ height: "100%", width: `${progressoMeta}%`, background: "var(--brand)", borderRadius: 99, transition: "width .4s" }} />
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  ) : null;
+
   const Tabs = (
-    <div style={{ display: "flex", gap: 4, background: "var(--surface2)", borderRadius: 12, padding: 4, marginBottom: 24, flexWrap: "wrap" }}>
+    <div style={{ display: "flex", gap: 4, background: "var(--surface2)", borderRadius: 12, padding: 4, marginBottom: 24, overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
       {[
-        { id: "ciclos",   label: "Ciclos",   Icon: Activity },
-        { id: "plano",    label: "Plano",    Icon: Target },
-        { id: "exames",   label: "Exames",   Icon: FlaskConical },
-        { id: "anamnese", label: "Anamnese", Icon: ClipboardList },
+        { id: "ciclos",    label: "Ciclos",      Icon: Activity },
+        { id: "plano",     label: "Plano",       Icon: Target },
+        { id: "exames",    label: "Exames",      Icon: FlaskConical },
+        { id: "timeline",  label: "Timeline",    Icon: Clock },
+        { id: "anamnese",  label: "Anamnese",    Icon: ClipboardList },
         { id: "protocolo", label: "Medicamentos", Icon: Pill },
       ].map((t) => (
-        <button key={t.id} onClick={() => setAbaAtiva(t.id)} style={{
-          flex: "1 1 auto", minWidth: 110,
-          display: "flex", alignItems: "center", justifyContent: "center", gap: 7,
-          padding: "10px 16px", borderRadius: 9, fontSize: 13.5, fontWeight: 600,
+        <button key={t.id} onClick={() => { setAbaAtiva(t.id); setSubViewExames("lista"); }} style={{
+          flex: "0 0 auto",
+          display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
+          padding: "9px 14px", borderRadius: 9, fontSize: 13, fontWeight: 600, whiteSpace: "nowrap",
           background: abaAtiva === t.id ? "var(--surface)" : "transparent",
           color: abaAtiva === t.id ? "var(--brand)" : "var(--inkFaint)",
           boxShadow: abaAtiva === t.id ? "0 1px 3px rgba(0,0,0,.08)" : "none",
           transition: "all 0.15s",
         }}>
-          <t.Icon size={15} /> {t.label}
+          <t.Icon size={14} /> {t.label}
         </button>
       ))}
     </div>
   );
 
-  const PainelExames = <Exames pacienteId={p.id} pacienteGenero={p.sexo === "Masculino" ? "M" : "F"} pacienteNome={p.nome} navegar={navegar} />;
+  // ─── Painel Exames com sub-view de comparação ───────────────
+  const PainelExames = subViewExames === "comparar" ? (
+    <ExamesComparacao
+      exames={examesLista}
+      genero={genero}
+      onVoltar={() => setSubViewExames("lista")}
+    />
+  ) : (
+    <div>
+      {examesLista.length >= 2 && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 14 }}>
+          <button className="btn btn-ghost" style={{ fontSize: 13, gap: 7 }} onClick={() => setSubViewExames("comparar")}>
+            <GitCompare size={15} /> Comparar exames
+          </button>
+        </div>
+      )}
+      <Exames pacienteId={p.id} pacienteGenero={genero} pacienteNome={p.nome} navegar={navegar} />
+    </div>
+  );
+
+  // ─── Painel Timeline ─────────────────────────────────────────
+  const CORES_TIPO = { inicio: "var(--brand)", ciclo: "var(--ink)", meta: "#d4a017", exame: "#6b4fc4", anamnese: "var(--inkFaint)" };
+  const ICONES_TIPO = { inicio: "🏁", ciclo: "📊", meta: "🏆", exame: "🔬", anamnese: "📋" };
+  const PainelTimeline = (
+    <div>
+      {timeline.length === 0 ? (
+        <div style={{ padding: 32, textAlign: "center", color: "var(--inkFaint)", fontSize: 14 }}>
+          Nenhum evento registrado ainda.
+        </div>
+      ) : (
+        <div style={{ position: "relative", paddingLeft: 32 }}>
+          <div style={{ position: "absolute", left: 14, top: 0, bottom: 0, width: 2, background: "var(--line)", borderRadius: 2 }} />
+          {timeline.map((ev, i) => (
+            <div key={i} style={{ position: "relative", marginBottom: 20, paddingBottom: 4 }}>
+              <div style={{ position: "absolute", left: -25, top: 2, width: 24, height: 24, borderRadius: "50%", background: "var(--surface)", border: `2px solid ${CORES_TIPO[ev.tipo] || "var(--line)"}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>
+                {ICONES_TIPO[ev.tipo] || "•"}
+              </div>
+              <div style={{ fontSize: 11.5, color: "var(--inkFaint)", marginBottom: 3 }}>
+                {ev.data ? new Date(ev.data + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : ""}
+              </div>
+              <div style={{ fontSize: 13.5, color: "var(--ink)", fontWeight: 500, lineHeight: 1.5 }}>{ev.desc}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
   const PainelAnamnese = <Anamnese pacienteId={p.id} pacienteNome={p.nome} navegar={navegar} />;
   const PainelProtocolo = <Protocolo pacienteId={p.id} pacienteNome={p.nome} />;
   const gerarPdfPlano = async () => {
@@ -769,11 +890,13 @@ export default function Ficha({ pacienteId, navegar }) {
     return (
       <div className={animarSaindo ? "ficha-saindo" : ""}>
         {Header}
+        {CardResumo}
         {Tabs}
         {abaAtiva === "exames" && PainelExames}
         {abaAtiva === "anamnese" && PainelAnamnese}
         {abaAtiva === "protocolo" && PainelProtocolo}
         {abaAtiva === "plano" && PainelPlano}
+        {abaAtiva === "timeline" && PainelTimeline}
         {abaAtiva === "ciclos" && (
           <div className="card" style={{ padding: "48px 24px", textAlign: "center" }}>
             <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>Nenhum ciclo registrado ainda</div>
@@ -808,14 +931,40 @@ export default function Ficha({ pacienteId, navegar }) {
   return (
     <div className={animarSaindo ? "ficha-saindo" : ""}>
       {Header}
+      {CardResumo}
       {Tabs}
 
       {abaAtiva === "exames" && PainelExames}
       {abaAtiva === "anamnese" && PainelAnamnese}
         {abaAtiva === "protocolo" && PainelProtocolo}
         {abaAtiva === "plano" && PainelPlano}
+        {abaAtiva === "timeline" && PainelTimeline}
 
       {abaAtiva === "ciclos" && (<>
+
+      {/* Banner de alerta se paciente ficou muito tempo sem ciclo */}
+      {(() => {
+        const u = ultimoCiclo(p);
+        const iso = u?.data || p.inicio;
+        const dias = iso ? Math.floor((Date.now() - new Date(iso + "T12:00:00")) / 86400000) : null;
+        if (!dias || dias < 30 || !p.ativo) return null;
+        const cor = dias > 60 ? "#c0392b" : "#b45309";
+        const bg  = dias > 60 ? "#fff0f0" : "#fff8e6";
+        return (
+          <div style={{ background: bg, border: `1px solid ${cor}22`, borderRadius: 12, padding: "12px 16px", marginBottom: 20, display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 18 }}>{dias > 60 ? "🔴" : "🟡"}</span>
+            <div>
+              <span style={{ fontSize: 13, fontWeight: 700, color: cor }}>
+                {p.nome.split(" ")[0]} está há {dias} dias sem novo ciclo registrado
+              </span>
+              <div style={{ fontSize: 12, color: cor, opacity: .8, marginTop: 2 }}>
+                {dias > 60 ? "Considere entrar em contato para verificar a adesão." : "Pode ser hora de agendar um retorno."}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       <div className="card" style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fit, minmax(140px, 1fr))", gap: isMobile ? 18 : 24, padding: "22px 24px", marginBottom: 28 }}>
         <Resumo label="Tempo" value={mesesTrat(p.inicio)} unit="meses" />
         <Resumo label="Peso atual" value={br(ultimoCiclo(p).peso)} unit="kg" sub={`−${br(perdaPeso(p))} kg`} />
@@ -900,7 +1049,20 @@ export default function Ficha({ pacienteId, navegar }) {
                     </div>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: isMobile ? "1fr 1fr" : "repeat(auto-fit, minmax(120px, 1fr))", gap: 18 }}>
-                    <KV k="Peso" v={`${br(c.peso)} kg`} />
+                    <div>
+                      <KV k="Peso" v={`${br(c.peso)} kg`} />
+                      {(() => {
+                        const delta = deltaMetaMes(p, c);
+                        if (delta == null) return null;
+                        const ok = delta <= 0;
+                        return (
+                          <div style={{ marginTop: 4, fontSize: 11.5, fontWeight: 700, color: ok ? "var(--good)" : "var(--bad,#c0392b)", display: "flex", alignItems: "center", gap: 4 }}>
+                            {ok ? "✓" : "↑"} {ok ? "Meta atingida" : `+${br(Math.abs(delta))} kg acima da meta`}
+                            <span style={{ fontWeight: 400, color: "var(--inkFaint)" }}>({br(metaDoMes(p, c))} kg)</span>
+                          </div>
+                        );
+                      })()}
+                    </div>
                     <KV k="% Gordura" v={c.gordura != null ? `${br(c.gordura)}%` : "—"} />
                     <KV k="Massa magra" v={massaMagraKg(c) != null ? `${br(massaMagraKg(c))} kg` : "—"} />
                     <KV k="Gordura visceral" v={c.visceral != null ? c.visceral : "—"} />
