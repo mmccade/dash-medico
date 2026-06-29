@@ -1,4 +1,4 @@
-// src/screens/ExamesGlobal.jsx
+\// src/screens/ExamesGlobal.jsx
 // Aba global de Exames (menu lateral) — leitura avulsa de laudo.
 // Como não há ficha de paciente, o médico escolhe o gênero (afeta as faixas ideais).
 
@@ -11,7 +11,7 @@ export default function ExamesGlobal({ navegar }) {
   return (
     <div>
       <div style={{ marginBottom: 16 }}>
-        <h1 className="page-title" style={{ fontSize: 24, fontWeight: 600 }}>Leitor de Exames</h1>
+        <h1 className="page-title" style={{ fontSize: 24, fontWeight: 600 }}>Exames laboratoriais</h1>
         <p className="page-sub">Leia qualquer laudo, baixe o PDF ou vincule a um paciente.</p>
       </div>
 
