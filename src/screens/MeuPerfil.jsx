@@ -63,9 +63,11 @@ export default function MeuPerfil() {
   const abrirPortal = async () => {
     setAbrindoPortal(true);
     try {
+      const token = await auth.currentUser?.getIdToken();
+      if (!token) { toast("Sessão expirada. Faça login novamente.", "error"); setAbrindoPortal(false); return; }
       const res = await fetch("/api/create-portal", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ email: user?.email }),
       });
       const body = await res.json();
@@ -94,9 +96,10 @@ export default function MeuPerfil() {
       const cred = EmailAuthProvider.credential(user.email, senhaEmail);
       await reauthenticateWithCredential(auth.currentUser, cred);
 
+      const token = await auth.currentUser?.getIdToken();
       const res = await fetch("/api/change-email", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ emailAtual: user.email, emailNovo: novoEmail.trim() }),
       });
       const body = await res.json();
