@@ -6,13 +6,15 @@
 //  - onChange: (novoArray) => void
 //  - sugestoesDepleção: array opcional de nutrientes vindos da depleção por medicamentos
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Search, X, Plus, Check, AlertTriangle, Sparkles, Info } from "lucide-react";
 import { SUPLEMENTOS, interacoesEntre, sugestoesSinergicas } from "../lib/suplementos.js";
 
 export default function PlanejadorSuplementos({ valor = [], onChange, sugestoesDepleção = [] }) {
   const [busca, setBusca] = useState("");
   const [aberto, setAberto] = useState(false);
+  const [paraCima, setParaCima] = useState(false);
+  const inputRef = useRef(null);
 
   const disponiveis = SUPLEMENTOS.filter((s) => !valor.includes(s));
   const resultados = disponiveis.filter((s) => s.toLowerCase().includes(busca.toLowerCase())).slice(0, 8);
@@ -25,8 +27,19 @@ export default function PlanejadorSuplementos({ valor = [], onChange, sugestoesD
     (n) => SUPLEMENTOS.includes(n) && !valor.includes(n)
   );
 
+  // Decide se o dropdown abre pra cima ou pra baixo conforme o espaço na viewport.
+  useEffect(() => {
+    if (!aberto || !inputRef.current) return;
+    const rect = inputRef.current.getBoundingClientRect();
+    const espacoAbaixo = window.innerHeight - rect.bottom;
+    const alturaEstimada = Math.min(240, resultados.length * 44 + 8);
+    setParaCima(espacoAbaixo < alturaEstimada + 16 && rect.top > alturaEstimada);
+  }, [aberto, busca, resultados.length]);
+
   const adicionar = (nome) => { if (!valor.includes(nome)) onChange([...valor, nome]); setBusca(""); setAberto(false); };
   const remover = (nome) => onChange(valor.filter((s) => s !== nome));
+
+  const dropdownPos = paraCima ? { bottom: "100%", marginBottom: 4 } : { top: "100%", marginTop: 4 };
 
   return (
     <div>
@@ -34,14 +47,16 @@ export default function PlanejadorSuplementos({ valor = [], onChange, sugestoesD
       <div style={{ position: "relative", marginBottom: 12 }}>
         <Search size={15} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--inkFaint)" }} />
         <input
+          ref={inputRef}
           value={busca}
           onChange={(e) => { setBusca(e.target.value); setAberto(true); }}
           onFocus={() => setAberto(true)}
+          onBlur={() => setTimeout(() => setAberto(false), 150)}
           placeholder="Adicionar suplemento ao protocolo…"
           style={{ width: "100%", padding: "10px 14px 10px 34px", borderRadius: 10, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13.5, boxSizing: "border-box" }}
         />
         {aberto && busca && resultados.length > 0 && (
-          <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.12)", zIndex: 20, maxHeight: 240, overflowY: "auto" }}>
+          <div style={{ position: "absolute", ...dropdownPos, left: 0, right: 0, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.12)", zIndex: 50, maxHeight: 240, overflowY: "auto" }}>
             {resultados.map((s) => (
               <button key={s} onClick={() => adicionar(s)}
                 style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px", textAlign: "left", borderBottom: "1px solid var(--line)" }}
