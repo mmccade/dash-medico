@@ -259,3 +259,47 @@ export function htmlPlano({ paciente, plano, config }) {
 export async function baixarPdfPlano({ paciente, plano, config }) {
   await gerar(htmlPlano({ paciente, plano, config }), `Plano_${(paciente?.nome || "paciente").replace(/[^a-zA-Z0-9]+/g, "_")}.pdf`);
 }
+
+// ─── PDF de Suplementação ────────────────────────────────────
+export function htmlSuplemento({ paciente, suplementos = [], config }) {
+  const slug = (s) => (s || "paciente").replace(/[^a-zA-Z0-9]+/g, "_");
+  const itens = suplementos.map((it) => {
+    const nome = typeof it === "string" ? it : it.nome;
+    const dose = typeof it === "object" && it.dose ? `${it.dose} ${it.unidade || "mg"}` : "";
+    return `
+      <tr style="page-break-inside:avoid">
+        <td style="padding:9px 14px;border-bottom:1px solid #eef2f2;font-size:13px;font-weight:600;color:#27322f">${esc(nome)}</td>
+        <td style="padding:9px 14px;border-bottom:1px solid #eef2f2;font-size:13px;color:#27322f;text-align:right">${esc(dose) || "—"}</td>
+      </tr>`;
+  }).join("");
+
+  const corpo = `
+    ${cabecalho(config, "Protocolo de suplementação")}
+    ${paciente ? `<div style="background:#f0f4f4;border-radius:10px;padding:16px 18px;margin-bottom:20px">
+      <div style="font-size:18px;font-weight:700;color:#27322f">${esc(paciente.nome)}</div>
+      ${paciente.idade ? `<div style="font-size:13px;color:#5a6663;margin-top:4px">${paciente.idade} anos · ${esc(paciente.sexo || "")}</div>` : ""}
+    </div>` : ""}
+
+    <div style="font-size:15px;font-weight:700;color:#0d7a82;margin-bottom:12px">Suplementos prescritos</div>
+    <table style="width:100%;border-collapse:collapse">
+      <thead>
+        <tr style="background:#f0f4f4">
+          <th style="padding:9px 14px;font-size:11.5px;color:#5a6663;text-align:left;text-transform:uppercase;letter-spacing:.4px">Suplemento</th>
+          <th style="padding:9px 14px;font-size:11.5px;color:#5a6663;text-align:right;text-transform:uppercase;letter-spacing:.4px">Dose</th>
+        </tr>
+      </thead>
+      <tbody>${itens}</tbody>
+    </table>
+
+    <div style="background:#f0f4f4;border-radius:9px;padding:13px 16px;margin-top:20px;font-size:11px;color:#8a9693;line-height:1.6">
+      As doses e interações são <b>informativas</b>. A prescrição e posologia final são de responsabilidade exclusiva do médico responsável.
+    </div>
+    ${rodape(config)}`;
+
+  return PAGINA(corpo);
+}
+
+export async function baixarPdfSuplemento({ paciente, suplementos, config }) {
+  const slug = (s) => (s || "paciente").replace(/[^a-zA-Z0-9]+/g, "_");
+  await gerar(htmlSuplemento({ paciente, suplementos, config }), `Suplementos_${slug(paciente?.nome)}.pdf`);
+}
