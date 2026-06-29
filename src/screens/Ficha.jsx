@@ -840,7 +840,7 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
   );
 
   // ─── Painel Timeline ─────────────────────────────────────────
-  const CORES_TIPO = { inicio: "var(--brand)", ciclo: "var(--ink)", meta: "#d4a017", exame: "#6b4fc4", anamnese: "var(--inkFaint)" };
+  const CORES_TIPO = { inicio: "var(--brand)", ciclo: "#6b4fc4", meta: "#d4a017", exame: "#1d6fa8", anamnese: "var(--inkFaint)" };
   const ICONES_TIPO = { inicio: "🏁", ciclo: "📊", meta: "🏆", exame: "🔬", anamnese: "📋" };
   const PainelTimeline = (
     <div>
@@ -849,17 +849,37 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
           Nenhum evento registrado ainda.
         </div>
       ) : (
-        <div style={{ position: "relative", paddingLeft: 32 }}>
-          <div style={{ position: "absolute", left: 14, top: 0, bottom: 0, width: 2, background: "var(--line)", borderRadius: 2 }} />
+        <div style={{ position: "relative", paddingLeft: 36 }}>
+          <div style={{ position: "absolute", left: 16, top: 0, bottom: 0, width: 2, background: "var(--line)", borderRadius: 2 }} />
           {timeline.map((ev, i) => (
-            <div key={i} style={{ position: "relative", marginBottom: 20, paddingBottom: 4 }}>
-              <div style={{ position: "absolute", left: -25, top: 2, width: 24, height: 24, borderRadius: "50%", background: "var(--surface)", border: `2px solid ${CORES_TIPO[ev.tipo] || "var(--line)"}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>
+            <div key={i} style={{ position: "relative", marginBottom: 24 }}>
+              {/* Bolinha */}
+              <div style={{ position: "absolute", left: -28, top: 2, width: 26, height: 26, borderRadius: "50%", background: "var(--surface)", border: `2px solid ${CORES_TIPO[ev.tipo] || "var(--line)"}`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13 }}>
                 {ICONES_TIPO[ev.tipo] || "•"}
               </div>
+              {/* Data */}
               <div style={{ fontSize: 11.5, color: "var(--inkFaint)", marginBottom: 3 }}>
                 {ev.data ? new Date(ev.data + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" }) : ""}
               </div>
-              <div style={{ fontSize: 13.5, color: "var(--ink)", fontWeight: 500, lineHeight: 1.5 }}>{ev.desc}</div>
+              {/* Descrição principal */}
+              <div style={{ fontSize: 14, color: "var(--ink)", fontWeight: 600, lineHeight: 1.4 }}>{ev.desc}</div>
+              {/* Detalhe */}
+              {ev.detalhe && (
+                <div style={{ fontSize: 12.5, color: "var(--inkSoft)", marginTop: 3 }}>{ev.detalhe}</div>
+              )}
+              {/* Link ver ciclo */}
+              {ev.tipo === "ciclo" && ev.cicloIdx != null && (
+                <button onClick={() => { setAbaAtiva("ciclos"); setTimeout(() => { const els = document.querySelectorAll("[data-ciclo-idx]"); if (els[ev.cicloIdx]) els[ev.cicloIdx].scrollIntoView({ behavior: "smooth", block: "center" }); }, 100); }}
+                  style={{ fontSize: 12, color: "var(--brand)", marginTop: 5, textDecoration: "underline", fontWeight: 500 }}>
+                  Ver detalhes do ciclo →
+                </button>
+              )}
+              {ev.tipo === "exame" && (
+                <button onClick={() => setAbaAtiva("exames")}
+                  style={{ fontSize: 12, color: "var(--brand)", marginTop: 5, textDecoration: "underline", fontWeight: 500 }}>
+                  Ver exames →
+                </button>
+              )}
             </div>
           ))}
         </div>
