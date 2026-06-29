@@ -140,29 +140,49 @@ export const progressoMetaFinal = (p) => {
 // Tipos: "inicio" | "ciclo" | "meta" | "exame" | "anamnese"
 export const gerarTimeline = (p, exames = []) => {
   const eventos = [];
-  const fmt = (iso) => { try { return new Date(iso + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" }); } catch { return iso; } };
+  const fmt = (iso) => {
+    try { return new Date(iso + "T12:00:00").toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit" }); }
+    catch { return iso; }
+  };
 
   // Primeira consulta
-  if (p.inicio) eventos.push({ data: p.inicio, tipo: "inicio", desc: "Primeira consulta" });
+  if (p.inicio) eventos.push({ data: p.inicio, tipo: "inicio", desc: "Início do acompanhamento", detalhe: p.objetivo ? `Objetivo: ${p.objetivo}` : null });
 
   // Ciclos
   (p.ciclos || []).forEach((c, i) => {
     if (!c.data && !c.mes) return;
     const iso = c.data || p.inicio;
-    const perdaStr = i > 0 && c.peso != null && p.ciclos[i - 1]?.peso != null
-      ? ` · ${+(p.ciclos[i - 1].peso - c.peso).toFixed(1) > 0 ? "-" : "+"}${Math.abs(+(p.ciclos[i - 1].peso - c.peso).toFixed(1))} kg`
-      : (c.peso ? ` · ${br(c.peso)} kg` : "");
-    eventos.push({ data: iso, tipo: "ciclo", desc: `${c.mes || `Ciclo ${i + 1}`}${perdaStr}` });
 
-    // Meta batida nesse ciclo?
+    // Peso e perda
+    const pesoStr = c.peso != null ? `Peso: ${br(c.peso)} kg` : null;
+    const perdaNum = i > 0 && c.peso != null && p.ciclos[i - 1]?.peso != null
+      ? +(p.ciclos[i - 1].peso - c.peso).toFixed(1) : null;
+    const perdaStr = perdaNum != null
+      ? perdaNum > 0 ? `Perdeu ${br(perdaNum)} kg neste ciclo` : perdaNum < 0 ? `Ganhou ${br(Math.abs(perdaNum))} kg` : "Peso estável"
+      : null;
+
+    const partes = [pesoStr, perdaStr].filter(Boolean);
+    eventos.push({
+      data: iso,
+      tipo: "ciclo",
+      desc: c.mes ? `Ciclo registrado — ${c.mes}` : `Ciclo ${i + 1} registrado`,
+      detalhe: partes.join(" · ") || null,
+      cicloIdx: i,
+    });
+
+    // Meta batida nesse ciclo
     if (p.pesoMeta && c.peso != null && c.peso <= p.pesoMeta) {
-      eventos.push({ data: iso, tipo: "meta", desc: `Meta de ${br(p.pesoMeta)} kg atingida 🏆` });
+      eventos.push({ data: iso, tipo: "meta", desc: `🏆 Meta de ${br(p.pesoMeta)} kg atingida!`, detalhe: `Peso atual: ${br(c.peso)} kg` });
     }
   });
 
   // Exames laboratoriais
   (exames || []).forEach((ex) => {
-    if (ex.data) eventos.push({ data: ex.data, tipo: "exame", desc: `Exames enviados${ex.rotulo ? ` — ${ex.rotulo}` : ""}` });
+    if (ex.data) eventos.push({
+      data: ex.data, tipo: "exame",
+      desc: `Exames laboratoriais ${ex.titulo ? `— ${ex.titulo}` : "enviados"}`,
+      detalhe: ex.marcadores?.length ? `${ex.marcadores.length} marcadores analisados` : null,
+    });
   });
 
   return eventos.sort((a, b) => (a.data || "").localeCompare(b.data || ""));
