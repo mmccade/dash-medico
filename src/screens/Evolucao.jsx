@@ -1,4 +1,4 @@
-\// src/screens/Evolucao.jsx
+// src/screens/Evolucao.jsx
 // + Substitui o <select> por SeletorPaciente (abas Ativos/Inativos/Todos + busca + faixa idade)
 // + Mantém o fluxo de comparação de ciclos e PDF
 
