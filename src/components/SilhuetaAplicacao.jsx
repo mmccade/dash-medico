@@ -33,18 +33,29 @@ function regiaoDe(id) {
 }
 
 const REGIOES = [
-  { id: "abdomen", nome: "Abdômen",  cx: 60, cy: 118 },
-  { id: "flanco",  nome: "Flancos",  cx: 20, cy: 130 },
-  { id: "braco",   nome: "Braços",   cx: 24, cy: 92 },
-  { id: "coxa",    nome: "Coxas",    cx: 47, cy: 180 },
+  { id: "abdomen", nome: "Abdômen",  cx: 60, cy: 88 },
+  { id: "flanco",  nome: "Flancos",  cx: 45, cy: 105 },
+  { id: "braco",   nome: "Braços",   cx: 28, cy: 80 },
+  { id: "coxa",    nome: "Coxas",    cx: 53, cy: 150 },
 ];
 
-const CORPO_PATH =
-  "M60 18 c-7 0 -12 5 -12 12 0 5 2 8 5 11 -8 2 -16 6 -22 12 -5 5 -7 14 -8 24 " +
-  "l-3 26 c0 3 4 4 6 1 l3 -20 1 0 -2 34 c-1 8 -1 22 1 34 l3 50 c1 5 9 5 10 0 " +
-  "l4 -44 2 0 4 44 c1 5 9 5 10 0 l3 -50 c2 -12 2 -26 1 -34 l-2 -34 1 0 3 20 " +
-  "c2 3 6 2 6 -1 l-3 -26 c-1 -10 -3 -19 -8 -24 -6 -6 -14 -10 -22 -12 3 -3 5 -6 5 -11 " +
-  "0 -7 -5 -12 -12 -12 z";
+// Corpo humano por composição de formas (robusto e proporcional).
+// Renderizado tanto no componente (JSX) quanto no PDF (string SVG).
+// Recebe fill/stroke para adaptar a tema claro/escuro.
+const CORPO_FORMAS = (fill, stroke) => `
+  <circle cx="60" cy="22" r="11.5" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>
+  <rect x="55.5" y="31" width="9" height="8" rx="3" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>
+  <path d="M46 44 C 39 46 34 50 31 57 L 24 99 C 23.3 103 28.5 104 29.8 100 L 37 61 C 38.5 56 41 52 46 51 Z" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>
+  <path d="M74 44 C 81 46 86 50 89 57 L 96 99 C 96.7 103 91.5 104 90.2 100 L 83 61 C 81.5 56 79 52 74 51 Z" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>
+  <path d="M60 39 C 50 39 44 43 42 49 C 40.5 55 40 62 40 70 L 41.5 108 C 41.5 114 78.5 114 78.5 108 L 80 70 C 80 62 79.5 55 78 49 C 76 43 70 39 60 39 Z" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>
+  <path d="M49 110 C 46.5 110 44.5 113 44.5 117 L 46.5 176 L 49.5 223 C 49.5 228 56.5 228 56.5 223 L 59 164 L 59 117 C 59 113 51 110 49 110 Z" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>
+  <path d="M71 110 C 73.5 110 75.5 113 75.5 117 L 73.5 176 L 70.5 223 C 70.5 228 63.5 228 63.5 223 L 61 164 L 61 117 C 61 113 69 110 71 110 Z" fill="${fill}" stroke="${stroke}" stroke-width="1.5"/>
+`;
+
+// Componente JSX do corpo (usa dangerouslySetInnerHTML via <g>) — cores por CSS var.
+function CorpoSvg({ fill = "var(--surface2,#dce8e8)", stroke = "var(--line,#9bb0b0)" }) {
+  return <g dangerouslySetInnerHTML={{ __html: CORPO_FORMAS(fill, stroke) }} />;
+}
 
 const VERDE = "#1a9e6e", VERDE_BG = "#e1f5ee";
 const VERM = "#d64545", VERM_BG = "#fdecec";
@@ -197,7 +208,7 @@ export default function SilhuetaAplicacao({ valor, onChange, somenteLeitura = fa
     return (
       <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
         <svg viewBox="0 0 120 240" width={tamanho * 0.45} height={tamanho * 0.9}>
-          <path d={CORPO_PATH} fill="var(--surface2,#eef2f2)" stroke="var(--line,#dde5e5)" strokeWidth="1.5" />
+          <CorpoSvg fill="var(--surface2,#dce8e8)" stroke="var(--line,#9bb0b0)" />
           {valor && (() => {
             const r = REGIOES.find((x) => x.id === regiaoDe(valor));
             if (!r) return null;
@@ -220,7 +231,7 @@ export default function SilhuetaAplicacao({ valor, onChange, somenteLeitura = fa
           Toque na região do corpo onde a dose será aplicada.
         </p>
         <svg viewBox="0 0 120 240" width={tamanho * 0.5} height={tamanho} style={{ overflow: "visible" }}>
-          <path d={CORPO_PATH} fill="var(--surface2,#eef2f2)" stroke="var(--line,#dde5e5)" strokeWidth="1.5" />
+          <CorpoSvg fill="var(--surface2,#dce8e8)" stroke="var(--line,#9bb0b0)" />
           {REGIOES.map((r) => {
             const temPonto = valor && regiaoDe(valor) === r.id;
             return (
@@ -285,11 +296,11 @@ export default function SilhuetaAplicacao({ valor, onChange, somenteLeitura = fa
 // ── SVG estático para PDF (silhueta + ponto destacado) ────────
 // Mapa de posições para PDF (centro visual de cada região)
 const PDF_POSICOES = {
-  abdomen_se: { cx: 48, cy: 108 }, abdomen_sd: { cx: 72, cy: 108 },
-  abdomen_ie: { cx: 48, cy: 128 }, abdomen_id: { cx: 72, cy: 128 },
-  flanco_e: { cx: 22, cy: 125 }, flanco_d: { cx: 98, cy: 125 },
-  braco_e: { cx: 18, cy: 88 }, braco_d: { cx: 102, cy: 88 },
-  coxa_e: { cx: 44, cy: 178 }, coxa_d: { cx: 76, cy: 178 },
+  abdomen_se: { cx: 52, cy: 85 }, abdomen_sd: { cx: 68, cy: 85 },
+  abdomen_ie: { cx: 52, cy: 102 }, abdomen_id: { cx: 68, cy: 102 },
+  flanco_e: { cx: 43, cy: 98 }, flanco_d: { cx: 77, cy: 98 },
+  braco_e: { cx: 29, cy: 78 }, braco_d: { cx: 91, cy: 78 },
+  coxa_e: { cx: 51, cy: 150 }, coxa_d: { cx: 69, cy: 150 },
 };
 
 export function silhuetaSvgPdf(localId) {
@@ -301,7 +312,7 @@ export function silhuetaSvgPdf(localId) {
     ? `<circle cx="${r.cx}" cy="${r.cy}" r="7" fill="#0d7a82" stroke="#0d7a82" stroke-width="2" /><circle cx="${r.cx}" cy="${r.cy}" r="2.5" fill="#fff" />`
     : "";
   return `<svg viewBox="0 0 120 240" width="70" height="140" style="overflow:visible">
-    <path d="${CORPO_PATH}" fill="#f0f4f4" stroke="#dde5e5" stroke-width="1.5" />
+    ${CORPO_FORMAS("#f0f4f4", "#9bb0b0")}
     ${ponto}
   </svg>`;
 }
