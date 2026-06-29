@@ -1,190 +1,160 @@
 // src/lib/anamnese-schema.js
-// Estrutura da ficha de anamnese — baseada na aba INICIAL da planilha clínica.
-// Reutilizado pela tela (Anamnese.jsx) e pelo gerador de PDF (pdf-clinico.js).
+// Ficha de anamnese — AUDITADA para protocolo de emagrecimento (GLP-1 / tirzepatida).
+// Removidas seções de medicina integrativa que não agregam ao nicho e desvalorizam
+// o produto: Toxinas/Exposição Ambiental, Nutrição Funcional, Imunológico,
+// Saúde Mitocondrial, Exames de Imagem. Mantido o núcleo clínico relevante.
 //
-// tipo: "text" | "textarea" | "select" | "number"
-// "destacaPaciente: true" → campos usados para criar/identificar o paciente
+// Campo:
+//   k           → chave no objeto de dados
+//   label       → rótulo exibido
+//   tipo        → "text" | "textarea" | "select" | "decimal" | "inteiro" | "data" | "tel"
+//   opts        → opções (apenas para select)
+//   obrigatorio → true se precisa ser preenchido para criar o paciente
+//   digitos/decimais → controle de máscara para tipo "decimal"
+//   max         → limite para tipo "inteiro"
+//   unidade     → sufixo informativo (cm, kg, °C…)
+//   destacaPaciente → campo usado para criar/identificar o paciente
+//   sexo        → restringe a seção a um sexo ("Feminino")
+//
+// Reutilizado pela tela (Anamnese.jsx) e pelo gerador de PDF (pdf-clinico.js).
 
 export const SECOES_ANAMNESE = [
   {
     id: "dados",
     titulo: "Dados Pessoais",
     campos: [
-      { k: "nomeCompleto", label: "Nome completo", tipo: "text", destacaPaciente: true },
-      { k: "dataNascimento", label: "Data de nascimento", tipo: "text" },
-      { k: "idade", label: "Idade", tipo: "number", destacaPaciente: true },
-      { k: "sexo", label: "Sexo", tipo: "select", opts: ["Feminino", "Masculino"], destacaPaciente: true },
-      { k: "telefone", label: "Telefone", tipo: "text" },
+      { k: "nomeCompleto", label: "Nome completo", tipo: "text", obrigatorio: true, destacaPaciente: true },
+      { k: "dataNascimento", label: "Data de nascimento", tipo: "data" },
+      { k: "idade", label: "Idade", tipo: "inteiro", max: 120, unidade: "anos", obrigatorio: true, destacaPaciente: true },
+      { k: "sexo", label: "Sexo", tipo: "select", opts: ["Feminino", "Masculino"], obrigatorio: true, destacaPaciente: true },
+      { k: "telefone", label: "Telefone", tipo: "tel" },
       { k: "email", label: "E-mail", tipo: "text" },
-      { k: "estadoCivil", label: "Estado civil", tipo: "text" },
-      { k: "profissao", label: "Profissão", tipo: "text" },
-      { k: "endereco", label: "Endereço", tipo: "text" },
     ],
   },
   {
     id: "fisico",
     titulo: "Sinais Físicos e Vitais",
     campos: [
-      { k: "peso", label: "Peso (kg)", tipo: "number" },
-      { k: "altura", label: "Altura (m)", tipo: "number" },
-      { k: "pressaoArterial", label: "Pressão arterial", tipo: "text" },
-      { k: "frequenciaCardiaca", label: "Frequência cardíaca", tipo: "text" },
-      { k: "frequenciaRespiratoria", label: "Frequência respiratória", tipo: "text" },
-      { k: "temperatura", label: "Temperatura corporal", tipo: "text" },
-      { k: "exameFisicoGeral", label: "Exame físico geral", tipo: "textarea" },
+      { k: "peso", label: "Peso", tipo: "decimal", digitos: 4, decimais: 1, unidade: "kg", obrigatorio: true },
+      { k: "altura", label: "Altura", tipo: "inteiro", max: 250, unidade: "cm", obrigatorio: true },
+      { k: "circAbdominal", label: "Circunferência abdominal", tipo: "decimal", digitos: 4, decimais: 1, unidade: "cm" },
+      { k: "pressaoArterial", label: "Pressão arterial", tipo: "text", placeholder: "Ex: 120/80 mmHg" },
+      { k: "frequenciaCardiaca", label: "Frequência cardíaca", tipo: "inteiro", max: 250, unidade: "bpm" },
+      { k: "temperatura", label: "Temperatura corporal", tipo: "decimal", digitos: 3, decimais: 1, unidade: "°C" },
     ],
   },
   {
     id: "queixa",
-    titulo: "Queixa",
+    titulo: "Objetivo e Queixa",
     campos: [
-      { k: "queixaPrincipal", label: "Queixa principal", tipo: "textarea" },
-      { k: "inicioSintomas", label: "Início dos sintomas", tipo: "text" },
-      { k: "fatoresMelhoraPiora", label: "Fatores para melhora / piora", tipo: "textarea" },
-      { k: "evolucaoSintomas", label: "Evolução dos sintomas", tipo: "textarea" },
-      { k: "tratamentosAnteriores", label: "Tratamentos anteriores", tipo: "textarea" },
+      { k: "queixaPrincipal", label: "Objetivo principal / queixa", tipo: "textarea", obrigatorio: true, placeholder: "Ex: emagrecimento, perder gordura visceral, controle glicêmico…" },
+      { k: "tentativasAnteriores", label: "Tentativas anteriores de emagrecimento", tipo: "textarea", placeholder: "Dietas, medicações, cirurgias prévias…" },
+      { k: "pesoMaximo", label: "Maior peso que já teve", tipo: "decimal", digitos: 4, decimais: 1, unidade: "kg" },
+      { k: "expectativas", label: "Expectativas do tratamento", tipo: "textarea" },
     ],
   },
   {
     id: "historico",
-    titulo: "Histórico",
+    titulo: "Histórico de Saúde",
     campos: [
+      { k: "comorbidades", label: "Comorbidades (diabetes, hipertensão, tireoide…)", tipo: "textarea" },
       { k: "cirurgiasAnteriores", label: "Cirurgias anteriores", tipo: "textarea" },
       { k: "alergias", label: "Alergias", tipo: "text" },
-      { k: "historicoFamiliar", label: "Histórico familiar (doenças)", tipo: "textarea" },
-      { k: "hospitalizacoes", label: "Hospitalizações", tipo: "textarea" },
-      { k: "vacinacao", label: "Vacinação", tipo: "text" },
-      { k: "medicamentoEmUso", label: "Medicamento em uso", tipo: "textarea" },
+      { k: "historicoFamiliar", label: "Histórico familiar (obesidade, diabetes, cardíaco)", tipo: "textarea" },
+      { k: "medicamentoEmUso", label: "Medicamentos em uso contínuo", tipo: "textarea" },
     ],
   },
   {
     id: "feminino",
     titulo: "Saúde Feminina",
+    sexo: "Feminino",
     campos: [
       { k: "menstruacao", label: "Menstruação (ciclo / regularidade)", tipo: "text" },
       { k: "gestacoes", label: "Gestações / partos", tipo: "text" },
       { k: "metodoContraceptivo", label: "Método contraceptivo", tipo: "text" },
-      { k: "menopausa", label: "Menopausa", tipo: "select", opts: ["Não", "Pré", "Sim", "Não se aplica"] },
+      { k: "menopausa", label: "Menopausa", tipo: "select", opts: ["Não", "Pré", "Sim"] },
     ],
   },
   {
     id: "habitos",
     titulo: "Hábitos de Vida",
     campos: [
-      { k: "alimentacaoHabito", label: "Alimentação", tipo: "textarea" },
-      { k: "atividadeFisica", label: "Atividade física", tipo: "textarea" },
+      { k: "atividadeFisica", label: "Atividade física (tipo / frequência)", tipo: "textarea" },
+      { k: "rotinaSono", label: "Rotina e qualidade do sono", tipo: "text" },
       { k: "tabagismo", label: "Tabagismo", tipo: "select", opts: ["Não", "Sim", "Ex-fumante"] },
-      { k: "conexaoSocial", label: "Conexão social e suporte comunitário", tipo: "textarea" },
       { k: "consumoAlcool", label: "Consumo de álcool", tipo: "select", opts: ["Não", "Social", "Frequente", "Diário"] },
-      { k: "usoDrogas", label: "Uso de drogas", tipo: "text" },
-      { k: "rotinaSono", label: "Rotina de sono", tipo: "textarea" },
-      { k: "saudeEspiritual", label: "Autoavaliação de saúde espiritual", tipo: "text" },
-      { k: "religiosidadeMeditacao", label: "Religiosidade e meditação", tipo: "text" },
-      { k: "impactoTrabalho", label: "Impacto do trabalho e relacionamentos na saúde", tipo: "textarea" },
-      { k: "estresseSaudeMental", label: "Estresse e saúde mental", tipo: "textarea" },
+      { k: "nivelEstresse", label: "Nível de estresse", tipo: "select", opts: ["Baixo", "Moderado", "Alto"] },
     ],
   },
   {
     id: "alimentar",
     titulo: "Histórico Alimentar",
     campos: [
-      { k: "intoleranciaAlimentar", label: "Intolerâncias e sensibilidades alimentares", tipo: "textarea" },
-      { k: "frequenciaRefeicoes", label: "Frequência de refeições", tipo: "text" },
-      { k: "hidratacao", label: "Hidratação", tipo: "text" },
-      { k: "alimentosProcessados", label: "Consumo de alimentos processados", tipo: "select", opts: ["Baixo", "Moderado", "Alto"] },
-      { k: "suplementosNutricionais", label: "Consumo de suplementos nutricionais", tipo: "textarea" },
+      { k: "padraoAlimentar", label: "Padrão alimentar atual", tipo: "textarea", placeholder: "Número de refeições, horários, comportamento…" },
+      { k: "compulsaoAlimentar", label: "Compulsão / beliscar fora de hora", tipo: "select", opts: ["Não", "Às vezes", "Frequente"] },
+      { k: "intoleranciaAlimentar", label: "Intolerâncias / restrições alimentares", tipo: "text" },
+      { k: "hidratacao", label: "Hidratação (água por dia)", tipo: "text", placeholder: "Ex: 2 litros" },
+      { k: "alimentosProcessados", label: "Consumo de ultraprocessados", tipo: "select", opts: ["Baixo", "Moderado", "Alto"] },
+    ],
+  },
+  {
+    id: "hormonal",
+    titulo: "Saúde Hormonal e Metabólica",
+    campos: [
+      { k: "tireoide", label: "Tireoide (alteração / medicação)", tipo: "text" },
+      { k: "resistenciaInsulina", label: "Resistência à insulina / pré-diabetes", tipo: "select", opts: ["Não", "Suspeita", "Sim"] },
+      { k: "sintomasHormonais", label: "Sintomas de desequilíbrio hormonal", tipo: "textarea" },
     ],
   },
   {
     id: "psicologica",
     titulo: "Saúde Psicológica",
     campos: [
-      { k: "estadoEmocional", label: "Estado emocional", tipo: "select", opts: ["Estável", "Ansioso", "Deprimido", "Irritado", "Oscilante"] },
-      { k: "estresseMental", label: "Estresse e saúde mental", tipo: "textarea" },
-      { k: "historicoPsicologico", label: "Histórico de tratamento psicológico/psiquiátrico", tipo: "textarea" },
-      { k: "ansiedadeDepressao", label: "Sintomas de ansiedade / depressão", tipo: "select", opts: ["Não", "Leve", "Moderado", "Intenso"] },
-    ],
-  },
-  {
-    id: "toxinas",
-    titulo: "Toxinas e Exposição Ambiental",
-    campos: [
-      { k: "metaisPesados", label: "Exposição a metais pesados", tipo: "text" },
-      { k: "produtosHigiene", label: "Uso de produtos de higiene (composição química)", tipo: "textarea" },
-      { k: "agrotoxicosPoluentes", label: "Exposição a agrotóxicos e poluentes", tipo: "textarea" },
-      { k: "exposicaoOcupacional", label: "Histórico de exposição ocupacional a tóxicos", tipo: "textarea" },
-    ],
-  },
-  {
-    id: "hormonal",
-    titulo: "Saúde Hormonal",
-    campos: [
-      { k: "equilibrioHormonal", label: "Equilíbrio hormonal (cortisol, tireoide, sexuais)", tipo: "textarea" },
-      { k: "eixoHPA", label: "Eixo Hipotálamo-Hipófise-Adrenal (HPA)", tipo: "textarea" },
-      { k: "sintomasDesequilibrio", label: "Sintomas de desequilíbrio hormonal", tipo: "textarea" },
-      { k: "impactoEstresseHormonios", label: "Impacto do estresse crônico nos hormônios", tipo: "textarea" },
-    ],
-  },
-  {
-    id: "nutricao",
-    titulo: "Nutrição Funcional",
-    campos: [
-      { k: "metabolismoBasal", label: "Metabolismo basal e gasto energético", tipo: "text" },
-      { k: "indiceInflamacao", label: "Índice de inflamação", tipo: "text" },
-      { k: "microbiotaIntestinal", label: "Avaliação da microbiota intestinal", tipo: "textarea" },
-      { k: "necessidadesNutricionais", label: "Necessidades nutricionais específicas (antioxidantes, ômega-3)", tipo: "textarea" },
-    ],
-  },
-  {
-    id: "imunologico",
-    titulo: "Imunológico",
-    campos: [
-      { k: "infeccoesRecorrentes", label: "Histórico de infecções recorrentes", tipo: "textarea" },
-      { k: "doencasAutoimunes", label: "Doenças autoimunes", tipo: "text" },
-      { k: "inflamacaoCronica", label: "Sintomas de inflamação crônica", tipo: "textarea" },
-      { k: "respostaInflamatoria", label: "Resposta inflamatória ao estresse", tipo: "textarea" },
-    ],
-  },
-  {
-    id: "mitocondrial",
-    titulo: "Saúde Mitocondrial",
-    campos: [
-      { k: "energiaFadiga", label: "Níveis de energia e fadiga", tipo: "select", opts: ["Boa", "Regular", "Baixa", "Fadiga crônica"] },
-      { k: "fadigaCronica", label: "Síndrome de fadiga crônica", tipo: "select", opts: ["Não", "Suspeita", "Sim"] },
-      { k: "estresseOxidativo", label: "Estresse oxidativo", tipo: "text" },
-      { k: "funcionalidadeMitocondrial", label: "Funcionalidade mitocondrial", tipo: "textarea" },
-    ],
-  },
-  {
-    id: "imagem",
-    titulo: "Exames de Imagem",
-    campos: [
-      { k: "radiografias", label: "Radiografias", tipo: "textarea" },
-      { k: "ultrassonografias", label: "Ultrassonografias", tipo: "textarea" },
-      { k: "tomografias", label: "Tomografias computadorizadas", tipo: "textarea" },
-      { k: "ressonancias", label: "Ressonâncias magnéticas", tipo: "textarea" },
+      { k: "estadoEmocional", label: "Estado emocional", tipo: "select", opts: ["Estável", "Ansioso", "Deprimido", "Oscilante"] },
+      { k: "ansiedadeDepressao", label: "Ansiedade / depressão", tipo: "select", opts: ["Não", "Leve", "Moderado", "Intenso"] },
+      { k: "relacaoComida", label: "Relação com a comida (emocional)", tipo: "textarea" },
+      { k: "acompanhamentoPsi", label: "Acompanhamento psicológico/psiquiátrico", tipo: "text" },
     ],
   },
   {
     id: "adicionais",
-    titulo: "Adicionais",
+    titulo: "Observações Adicionais",
     campos: [
-      { k: "comentariosGerais", label: "Comentários gerais", tipo: "textarea" },
-      { k: "feedbackPaciente", label: "Feedback do paciente (geral)", tipo: "textarea" },
       { k: "observacoesImportantes", label: "Observações importantes", tipo: "textarea" },
     ],
   },
 ];
 
-// Campos usados ao criar paciente a partir da anamnese
+// Campos usados ao criar paciente a partir da anamnese.
+// altura no schema é em CM (inteiro) → convertida para METROS no paciente.
 export function anamneseParaPaciente(dados) {
+  const alturaCm = dados.altura ? Number(String(dados.altura).replace(",", ".")) : null;
+  const alturaM = alturaCm ? +(alturaCm / 100).toFixed(2) : null;
+  const pesoNum = dados.peso ? Number(String(dados.peso).replace(",", ".")) : null;
   return {
     nome: dados.nomeCompleto || "",
     idade: dados.idade ? Number(dados.idade) : null,
     sexo: dados.sexo || "Feminino",
-    altura: dados.altura ? Number(String(dados.altura).replace(",", ".")) : null,
+    altura: alturaM,
+    telefone: dados.telefone || "",
+    email: dados.email || "",
     objetivo: dados.queixaPrincipal || "",
-    comorbidades: dados.historicoFamiliar || "Nenhuma relatada",
+    comorbidades: dados.comorbidades || dados.historicoFamiliar || "Nenhuma relatada",
+    pesoInicial: pesoNum,
     inicio: new Date().toISOString().slice(0, 10),
   };
+}
+
+// Lista de campos obrigatórios faltando, respeitando lógica de sexo.
+export function camposObrigatoriosFaltando(dados) {
+  const faltando = [];
+  for (const secao of SECOES_ANAMNESE) {
+    if (secao.sexo && dados.sexo !== secao.sexo) continue;
+    for (const c of secao.campos) {
+      if (c.obrigatorio && (!dados[c.k] || String(dados[c.k]).trim() === "")) {
+        faltando.push(c.label);
+      }
+    }
+  }
+  return faltando;
 }
