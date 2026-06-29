@@ -1,4 +1,4 @@
-\// src/screens/ExamesGlobal.jsx
+// src/screens/ExamesGlobal.jsx
 // Aba global de Exames (menu lateral) — leitura avulsa de laudo.
 // Como não há ficha de paciente, o médico escolhe o gênero (afeta as faixas ideais).
 
