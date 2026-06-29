@@ -17,7 +17,19 @@
 
 import { useState, useEffect } from "react";
 import { Plus, FileText, FolderPlus, Check, X, Pencil, Trash2, Library, ArrowLeft } from "lucide-react";
-import PlanejadorSuplementos, { resumoItem } from "./PlanejadorSuplementos.jsx";
+import PlanejadorSuplementos from "./PlanejadorSuplementos.jsx";
+
+// Formata um item do protocolo para exibição (independente do PlanejadorSuplementos,
+// para não depender de exports que podem variar entre versões).
+const VIA_LABEL_LOCAL = { oral: "Oral", sublingual: "Sublingual", sc: "Injetável SC", im: "Injetável IM", topico: "Tópico" };
+function resumoItem(it) {
+  if (typeof it === "string") return it;
+  const partes = [it.nome];
+  if (it.conc && it.concUnidade && it.concUnidade !== "—") partes.push(`${it.conc} ${it.concUnidade}`);
+  if (it.dose) partes.push(`${it.dose} ${it.doseUnidade || it.unidade || "mg"}`);
+  partes.push(VIA_LABEL_LOCAL[it.via] || "Oral");
+  return partes.join(" · ");
+}
 
 export default function GerenciadorProtocolos({
   protocoloAplicado = [],

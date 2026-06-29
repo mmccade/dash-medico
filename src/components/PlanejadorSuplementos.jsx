@@ -1,19 +1,57 @@
 // src/components/PlanejadorSuplementos.jsx
-// Plano de suplementação com doses, unidades, sinergismos e antagonismos.
-// valor: [{ nome, dose, unidade }]  ← agora com dose
-// onChange: (novoArray) => void
-// sugestoesDepleção: [string] opcional
+// Builder de itens de um protocolo de suplementação.
+// Cada item: { nome, via, conc, concUnidade, dose, doseUnidade }
+//   via         → "oral" | "sublingual" | "sc" | "im" | "topico"
+//   conc        → concentração (string numérica, ex "5")  — ex.: B12 5 mg/mL
+//   concUnidade → "mg/mL" | "mcg/mL" | "%" | "—"
+//   dose        → string numérica (ex "1")
+//   doseUnidade → "mg" | "mcg" | ... | "mL"
+// Mantém compatibilidade com formatos antigos: string OU { nome, dose, unidade }.
+// onChange recebe SEMPRE o array completo de itens no formato novo.
 
 import { useState, useRef, useEffect } from "react";
 import { Search, X, Plus, Check, AlertTriangle, Sparkles, Info, Pencil } from "lucide-react";
 import { SUPLEMENTOS, interacoesEntre, sugestoesSinergicas } from "../lib/suplementos.js";
 
-const UNIDADES = ["mg", "mcg", "g", "ml", "UI", "cápsulas", "comprimidos"];
+export const VIAS = [
+  { id: "oral", label: "Oral" },
+  { id: "sublingual", label: "Sublingual" },
+  { id: "sc", label: "Injetável SC" },
+  { id: "im", label: "Injetável IM" },
+  { id: "topico", label: "Tópico" },
+];
+const VIA_LABEL = Object.fromEntries(VIAS.map((v) => [v.id, v.label]));
 
-// Normaliza para array de objetos (compatibilidade com formato antigo de strings)
+const UNIDADES_DOSE = ["mg", "mcg", "g", "mL", "UI", "gotas", "cápsulas", "comprimidos"];
+const UNIDADES_CONC = ["—", "mg/mL", "mcg/mL", "g/mL", "UI/mL", "%"];
+
+// Normaliza para o formato novo, aceitando string ou objeto antigo {nome,dose,unidade}
+function normalizarItem(v) {
+  if (typeof v === "string") {
+    return { nome: v, via: "oral", conc: "", concUnidade: "—", dose: "", doseUnidade: "mg" };
+  }
+  return {
+    nome: v.nome,
+    via: v.via || "oral",
+    conc: v.conc ?? "",
+    concUnidade: v.concUnidade ?? "—",
+    dose: v.dose ?? "",
+    doseUnidade: v.doseUnidade || v.unidade || "mg",
+  };
+}
 function normalizar(val) {
   if (!Array.isArray(val)) return [];
-  return val.map((v) => typeof v === "string" ? { nome: v, dose: "", unidade: "mg" } : v);
+  return val.map(normalizarItem);
+}
+
+// Resumo textual de um item (usado em PDF e listas)
+export function resumoItem(it) {
+  const i = normalizarItem(it);
+  const partes = [i.nome];
+  if (i.conc && i.concUnidade !== "—") partes.push(`${i.conc} ${i.concUnidade}`);
+  if (i.dose) partes.push(`${i.dose} ${i.doseUnidade}`);
+  partes.push(VIA_LABEL[i.via] || "Oral");
+  return partes.join(" · ");
 }
 
 export default function PlanejadorSuplementos({ valor = [], onChange, sugestoesDepleção = [] }) {
@@ -22,7 +60,7 @@ export default function PlanejadorSuplementos({ valor = [], onChange, sugestoesD
 
   const [busca, setBusca] = useState("");
   const [aberto, setAberto] = useState(false);
-  const [editandoDose, setEditandoDose] = useState(null); // nome do suplemento em edição
+  const [editando, setEditando] = useState(null); // nome em edição
   const [dropdownStyle, setDropdownStyle] = useState({});
   const inputRef = useRef(null);
 
@@ -46,14 +84,18 @@ export default function PlanejadorSuplementos({ valor = [], onChange, sugestoesD
   }, [aberto, busca, resultados.length]);
 
   const adicionar = (nome) => {
-    if (!nomes.includes(nome)) onChange([...itens, { nome, dose: "", unidade: "mg" }]);
+    if (!nomes.includes(nome)) {
+      onChange([...itens, normalizarItem(nome)]);
+      setEditando(nome); // já abre pra preencher via/conc/dose
+    }
     setBusca(""); setAberto(false);
   };
   const remover = (nome) => onChange(itens.filter((i) => i.nome !== nome));
-  const atualizarDose = (nome, campo, val) =>
+  const atualizar = (nome, campo, val) =>
     onChange(itens.map((i) => i.nome === nome ? { ...i, [campo]: val } : i));
 
-  const inp = { padding: "9px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13, boxSizing: "border-box", color: "var(--ink)" };
+  const inp = { padding: "9px 12px", borderRadius: 9, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13, boxSizing: "border-box", color: "var(--ink)", width: "100%" };
+  const lbl = { fontSize: 11, fontWeight: 600, color: "var(--inkFaint)", marginBottom: 4, display: "block" };
 
   return (
     <div>
@@ -98,38 +140,68 @@ export default function PlanejadorSuplementos({ valor = [], onChange, sugestoesD
         </div>
       )}
 
-      {/* Lista de suplementos com doses */}
+      {/* Lista de itens */}
       {itens.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 16 }}>
           {itens.map((it) => (
             <div key={it.nome} style={{ border: "1px solid var(--line)", borderRadius: 10, padding: "10px 14px", background: "var(--surface)" }}>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: editandoDose === it.nome ? 10 : 0 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: editando === it.nome ? 12 : 0 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 13.5, fontWeight: 600, color: "var(--ink)" }}>{it.nome}</span>
-                  {it.dose && (
+                  {(it.dose || (it.conc && it.concUnidade !== "—")) && (
                     <span style={{ fontSize: 12, color: "var(--inkFaint)", background: "var(--surface2)", padding: "2px 8px", borderRadius: 99 }}>
-                      {it.dose} {it.unidade}
+                      {it.conc && it.concUnidade !== "—" ? `${it.conc} ${it.concUnidade}` : ""}
+                      {it.conc && it.concUnidade !== "—" && it.dose ? " · " : ""}
+                      {it.dose ? `${it.dose} ${it.doseUnidade}` : ""}
                     </span>
                   )}
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "var(--brand)", background: "var(--brandSoft)", padding: "2px 8px", borderRadius: 99 }}>
+                    {VIA_LABEL[it.via] || "Oral"}
+                  </span>
                 </div>
                 <div style={{ display: "flex", gap: 6 }}>
-                  <button onClick={() => setEditandoDose(editandoDose === it.nome ? null : it.nome)}
+                  <button onClick={() => setEditando(editando === it.nome ? null : it.nome)}
                     style={{ color: "var(--brand)", padding: "3px 8px", borderRadius: 7, fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}>
-                    <Pencil size={12} /> {editandoDose === it.nome ? "Fechar" : "Dose"}
+                    <Pencil size={12} /> {editando === it.nome ? "Fechar" : "Editar"}
                   </button>
                   <button onClick={() => remover(it.nome)} style={{ color: "var(--inkFaint)", padding: "3px 6px", borderRadius: 7 }}>
                     <X size={14} />
                   </button>
                 </div>
               </div>
-              {editandoDose === it.nome && (
-                <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: 8 }}>
-                  <input type="text" inputMode="decimal" value={it.dose}
-                    onChange={(e) => atualizarDose(it.nome, "dose", e.target.value)}
-                    placeholder="Ex: 500" style={{ ...inp }} />
-                  <select value={it.unidade} onChange={(e) => atualizarDose(it.nome, "unidade", e.target.value)} style={{ ...inp, minWidth: 110 }}>
-                    {UNIDADES.map((u) => <option key={u} value={u}>{u}</option>)}
-                  </select>
+              {editando === it.nome && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div>
+                    <label style={lbl}>Via de administração</label>
+                    <select value={it.via} onChange={(e) => atualizar(it.nome, "via", e.target.value)} style={inp}>
+                      {VIAS.map((v) => <option key={v.id} value={v.id}>{v.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={lbl}>Concentração do insumo</label>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 130px", gap: 8 }}>
+                      <input type="text" inputMode="decimal" value={it.conc}
+                        onChange={(e) => atualizar(it.nome, "conc", e.target.value)}
+                        placeholder="Ex: 5" style={inp} />
+                      <select value={it.concUnidade} onChange={(e) => atualizar(it.nome, "concUnidade", e.target.value)} style={inp}>
+                        {UNIDADES_CONC.map((u) => <option key={u} value={u}>{u}</option>)}
+                      </select>
+                    </div>
+                    <div style={{ fontSize: 10.5, color: "var(--inkFaint)", marginTop: 4 }}>
+                      Ex.: B12 metilcobalamina pode variar de 500 mcg/mL a 5 mg/mL.
+                    </div>
+                  </div>
+                  <div>
+                    <label style={lbl}>Dose / posologia</label>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 130px", gap: 8 }}>
+                      <input type="text" inputMode="decimal" value={it.dose}
+                        onChange={(e) => atualizar(it.nome, "dose", e.target.value)}
+                        placeholder="Ex: 1" style={inp} />
+                      <select value={it.doseUnidade} onChange={(e) => atualizar(it.nome, "doseUnidade", e.target.value)} style={inp}>
+                        {UNIDADES_DOSE.map((u) => <option key={u} value={u}>{u}</option>)}
+                      </select>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
@@ -191,7 +263,7 @@ export default function PlanejadorSuplementos({ valor = [], onChange, sugestoesD
       {itens.length > 0 && (
         <div style={{ display: "flex", gap: 8, padding: "11px 14px", background: "var(--surface2)", borderRadius: 9, fontSize: 11.5, color: "var(--inkSoft)", lineHeight: 1.5, marginTop: 4 }}>
           <Info size={15} color="var(--inkFaint)" style={{ flexShrink: 0, marginTop: 1 }} />
-          <span>Interações <b>informativas</b> baseadas na literatura. Doses, posologia e a prescrição final são de <b>responsabilidade exclusiva do médico</b>.</span>
+          <span>Interações <b>informativas</b> baseadas na literatura. Doses, posologia, via e a prescrição final são de <b>responsabilidade exclusiva do médico</b>.</span>
         </div>
       )}
     </div>
