@@ -44,4 +44,5 @@ export const CONFIG_INICIAL = {
   crm: "CRM-SP 123456",
   logo: null,
   murevNoPdf: true,
+  protocolosSuplementacao: [],
 };
