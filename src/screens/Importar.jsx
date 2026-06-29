@@ -17,7 +17,7 @@ const CABECALHO = [
   "data_inicio",    // AAAA-MM-DD — início do tratamento (mesmo valor em todas as linhas do paciente)
   "idade",
   "sexo",           // Feminino | Masculino
-  "altura",         // metros: 1.64
+  "altura",         // altura em cm (164) ou metros (1.64) — ambos aceitos
   "objetivo",
   "condicoes",
   "mes",            // obrigatório — ex: Mai/26, Jun/26
