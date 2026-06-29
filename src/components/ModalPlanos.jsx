@@ -12,7 +12,7 @@ const PLANOS = [
   {
     id: "mensal",
     label: "Mensal",
-    preco: "R$ 29,90",
+    preco: "R$ 67,00",
     periodo: "/mês",
     destaque: false,
     itens: [
@@ -25,13 +25,13 @@ const PLANOS = [
   {
     id: "trimestral",
     label: "Trimestral",
-    preco: "R$ 79,90",
+    preco: "R$ 177,00",
     periodo: "/trimestre",
     destaque: true,
     tag: "Mais popular",
     itens: [
       "Tudo do plano mensal",
-      "Economia de R$ 9,80",
+      "Economia de R$ 24,00",
       "Suporte prioritário",
       "Acesso a novidades antes",
     ],
@@ -39,12 +39,12 @@ const PLANOS = [
   {
     id: "anual",
     label: "Anual",
-    preco: "R$ 199,00",
+    preco: "R$ 499,90",
     periodo: "/ano",
     destaque: false,
     itens: [
       "Tudo do plano trimestral",
-      "Economia de R$ 159,80",
+      "Economia de R$ 304,10",
       "Acesso vitalício às atualizações do ano",
     ],
   },
