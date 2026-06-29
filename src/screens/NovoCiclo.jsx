@@ -153,7 +153,22 @@ export default function NovoCiclo({ pacienteId, navegar }) {
         </div>
         <CampoTexto label="Medicação prescrita" v={f.medicacao} on={(v) => set("medicacao", v)} ph="Ex: Tirzepatida 5mg/semana + Metformina 500mg 2x/dia…" max={1000} />
         <div style={{ marginTop: 14 }}>
-          <CampoTexto label="Suplementação" v={f.suplementacao} on={(v) => set("suplementacao", v)} ph="Ex: vitamina D 5.000 UI, magnésio quelato…" max={500} />
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <label style={{ fontSize: 13, fontWeight: 600 }}>Suplementação</label>
+            {p?.suplementosProtocolo?.length > 0 && (
+              <button type="button" onClick={() => {
+                const plano = p.suplementosProtocolo.map((item) => {
+                  const nome = typeof item === "string" ? item : item.nome;
+                  const dose = typeof item === "object" && item.dose ? ` ${item.dose} ${item.unidade || "mg"}` : "";
+                  return `${nome}${dose}`;
+                }).join(", ");
+                set("suplementacao", plano);
+              }} style={{ fontSize: 12, color: "var(--brand)", fontWeight: 600, display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 8, border: "1px solid var(--brand)", background: "var(--brandSoft)" }}>
+                ✦ Usar plano do protocolo
+              </button>
+            )}
+          </div>
+          <CampoTexto label="" v={f.suplementacao} on={(v) => set("suplementacao", v)} ph="Ex: vitamina D 5.000 UI, magnésio quelato…" max={500} />
         </div>
       </Secao>
 
