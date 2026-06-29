@@ -687,6 +687,11 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
   if (meta && f0 && u && f0.peso > meta) {
     progresso = Math.min(100, Math.round(((f0.peso - u.peso) / (f0.peso - meta)) * 100));
   }
+  // progressoMeta é usado dentro do JSX de `Header` (abaixo). Precisa ser
+  // declarado ANTES de `Header`, senão dá TDZ: o corpo do componente executa
+  // top-down e construir o Header acessava `progressoMeta` antes da const ser
+  // inicializada → "Cannot access 'progressoMeta' before initialization".
+  const progressoMeta = progressoMetaFinal(p);
 
   const pesoBatido = metaPesoBatida(p);
   const visceralBatido = metaVisceralBatida(p);
@@ -782,7 +787,6 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
   const genero = p.sexo === "Masculino" ? "M" : "F";
   const resumoTexto = gerarResumo(p, examesLista);
   const timeline = gerarTimeline(p, examesLista);
-  const progressoMeta = progressoMetaFinal(p);
 
   const CardResumo = resumoTexto ? (
     <div style={{ background: "linear-gradient(135deg, var(--brandSoft,#d1f5e8), var(--surface))", border: "1px solid var(--brand,#0d7a82)22", borderRadius: 14, padding: "16px 20px", marginBottom: 20, display: "flex", gap: 14, alignItems: "flex-start" }}>
