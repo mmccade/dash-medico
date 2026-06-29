@@ -18,8 +18,20 @@ function labelMes(iso) {
   } catch { return iso; }
 }
 
+// Formata um item de suplemento (string antiga OU objeto novo {nome,via,conc,...})
+// em texto curto para o campo de suplementação do ciclo.
+const VIA_TXT = { oral: "VO", sublingual: "SL", sc: "SC", im: "IM", topico: "tópico" };
+function formatarItemSupl(item) {
+  if (typeof item === "string") return item;
+  const partes = [item.nome];
+  if (item.conc && item.concUnidade && item.concUnidade !== "—") partes.push(`${item.conc} ${item.concUnidade}`);
+  if (item.dose) partes.push(`${item.dose} ${item.doseUnidade || item.unidade || "mg"}`);
+  if (item.via && item.via !== "oral") partes.push(VIA_TXT[item.via] || item.via);
+  return partes.join(" ");
+}
+
 export default function NovoCiclo({ pacienteId, navegar }) {
-  const { getPaciente, addCiclo } = useStore();
+  const { getPaciente, addCiclo, config } = useStore();
   const toast = useToast();
   const p = getPaciente(pacienteId);
 
@@ -153,20 +165,33 @@ export default function NovoCiclo({ pacienteId, navegar }) {
         </div>
         <CampoTexto label="Medicação prescrita" v={f.medicacao} on={(v) => set("medicacao", v)} ph="Ex: Tirzepatida 5mg/semana + Metformina 500mg 2x/dia…" max={1000} />
         <div style={{ marginTop: 14 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 8 }}>
             <label style={{ fontSize: 13, fontWeight: 600 }}>Suplementação</label>
-            {p?.suplementosProtocolo?.length > 0 && (
-              <button type="button" onClick={() => {
-                const plano = p.suplementosProtocolo.map((item) => {
-                  const nome = typeof item === "string" ? item : item.nome;
-                  const dose = typeof item === "object" && item.dose ? ` ${item.dose} ${item.unidade || "mg"}` : "";
-                  return `${nome}${dose}`;
-                }).join(", ");
-                set("suplementacao", plano);
-              }} style={{ fontSize: 12, color: "var(--brand)", fontWeight: 600, display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 8, border: "1px solid var(--brand)", background: "var(--brandSoft)" }}>
-                ✦ Usar plano do protocolo
-              </button>
-            )}
+            <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              {p?.suplementosProtocolo?.length > 0 && (
+                <button type="button" onClick={() => {
+                  const plano = p.suplementosProtocolo.map((item) => formatarItemSupl(item)).join(", ");
+                  set("suplementacao", plano);
+                }} style={{ fontSize: 12, color: "var(--brand)", fontWeight: 600, display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 8, border: "1px solid var(--brand)", background: "var(--brandSoft)" }}>
+                  ✦ Usar protocolo do paciente
+                </button>
+              )}
+              {(config?.protocolosSuplementacao?.length > 0) && (
+                <select
+                  defaultValue=""
+                  onChange={(e) => {
+                    const prot = config.protocolosSuplementacao.find((x) => x.id === e.target.value);
+                    if (prot) set("suplementacao", (prot.itens || []).map((item) => formatarItemSupl(item)).join(", "));
+                    e.target.value = "";
+                  }}
+                  style={{ fontSize: 12, padding: "5px 10px", borderRadius: 8, border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", fontWeight: 600 }}>
+                  <option value="" disabled>✦ Aplicar protocolo salvo…</option>
+                  {config.protocolosSuplementacao.map((prot) => (
+                    <option key={prot.id} value={prot.id}>{prot.nome}</option>
+                  ))}
+                </select>
+              )}
+            </div>
           </div>
           <CampoTexto label="" v={f.suplementacao} on={(v) => set("suplementacao", v)} ph="Ex: vitamina D 5.000 UI, magnésio quelato…" max={500} />
         </div>
