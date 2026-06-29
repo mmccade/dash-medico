@@ -5,11 +5,11 @@
 // + InputData em todos os campos de data
 // + PDF de meta batida disponível quando bater
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, lazy, Suspense } from "react";
 import { ArrowLeft, Trash2, Stethoscope, FileText, ChevronDown, Pencil, X, Loader2, Check, Trophy, Activity, FlaskConical, ClipboardList, Pill, Target, Clock, GitCompare, Plus, Minus, Sparkles } from "lucide-react";
-import PlanejadorSuplementos from "../components/PlanejadorSuplementos.jsx";
+const PlanejadorSuplementos = lazy(() => import("../components/PlanejadorSuplementos.jsx"));
 import Exames from "./Exames.jsx";
-import ExamesComparacao from "./ExamesComparacao.jsx";
+const ExamesComparacao = lazy(() => import("./ExamesComparacao.jsx"));
 import Anamnese from "./Anamnese.jsx";
 import Protocolo from "./Protocolo.jsx";
 import PlanoAcompanhamento from "./PlanoAcompanhamento.jsx";
@@ -19,6 +19,7 @@ import { useToast } from "../lib/toast.jsx";
 import { imc, br, fmtData, primeiroCiclo, ultimoCiclo, perdaPeso, mesesTrat, parseNum, imcMeta, metaPesoBatida, metaVisceralBatida, massaMagraKg, gerarTimeline, gerarResumo, progressoMetaFinal, deltaMetaMes, metaDoMes } from "../lib/utils.js";
 import { listarExames } from "../services/db-exames.js";
 import { getSugestoes } from "../lib/biomarcadores.js";
+import { baixarPdfSuplemento } from "../services/pdf-clinico.js";
 import { useAuth } from "../lib/auth.jsx";
 import { Avatar, Toggle } from "../components/ui.jsx";
 import { LinhaChart } from "../components/charts.jsx";
@@ -824,11 +825,13 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
 
   // ─── Painel Exames com sub-view de comparação ───────────────
   const PainelExames = subViewExames === "comparar" ? (
-    <ExamesComparacao
-      exames={examesLista}
-      genero={genero}
-      onVoltar={() => setSubViewExames("lista")}
-    />
+    <Suspense fallback={<div style={{ padding: 32, textAlign: "center" }}><Loader2 size={22} className="spin" color="var(--inkFaint)" /></div>}>
+      <ExamesComparacao
+        exames={examesLista}
+        genero={genero}
+        onVoltar={() => setSubViewExames("lista")}
+      />
+    </Suspense>
   ) : (
     <div>
       {examesLista.length >= 2 && (
@@ -907,6 +910,15 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
 
   const PainelSuplemento = (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+      {/* Botão PDF */}
+      {(p.suplementosProtocolo?.length > 0) && (
+        <div style={{ display: "flex", justifyContent: "flex-end" }}>
+          <button className="btn btn-ghost" style={{ fontSize: 13, gap: 7 }}
+            onClick={() => baixarPdfSuplemento({ paciente: p, suplementos: p.suplementosProtocolo, config })}>
+            <FileText size={14} /> Exportar PDF
+          </button>
+        </div>
+      )}
       {sugestoesDosExames.length > 0 && (
         <div style={{ background: "linear-gradient(135deg, var(--brandSoft,#d1f5e8), var(--surface))", border: "1px solid var(--brand)22", borderRadius: 14, padding: "16px 18px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
@@ -935,11 +947,13 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
 
       <div className="card" style={{ padding: "18px 20px" }}>
         <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>Protocolo de suplementação</div>
-        <PlanejadorSuplementos
-          valor={p.suplementosProtocolo || []}
-          onChange={async (lista) => await editarPaciente(p.id, { suplementosProtocolo: lista })}
-          sugestoesDepleção={sugestoesDosExames}
-        />
+        <Suspense fallback={<div style={{ padding: 20, textAlign: "center" }}><Loader2 size={18} className="spin" color="var(--inkFaint)" /></div>}>
+          <PlanejadorSuplementos
+            valor={p.suplementosProtocolo || []}
+            onChange={async (lista) => await editarPaciente(p.id, { suplementosProtocolo: lista })}
+            sugestoesDepleção={sugestoesDosExames}
+          />
+        </Suspense>
       </div>
     </div>
   );
