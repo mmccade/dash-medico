@@ -5,17 +5,29 @@
 //  - valor: array de nomes de medicamentos selecionados
 //  - onChange: (novoArray) => void
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Search, X, Pill, Info } from "lucide-react";
 import { MEDICAMENTOS, buscarMedicamentos, nutrientesDepletados } from "../lib/medicamentos.js";
 
 export default function DeplecaoMedicamentos({ valor = [], onChange }) {
   const [busca, setBusca] = useState("");
   const [aberto, setAberto] = useState(false);
+  const [paraCima, setParaCima] = useState(false);
+  const inputRef = useRef(null);
 
   const resultados = buscarMedicamentos(busca).slice(0, 8);
   const mapa = nutrientesDepletados(valor);
   const nutrientes = Object.entries(mapa).sort((a, b) => b[1].length - a[1].length);
+
+  // Decide se o dropdown abre pra cima ou pra baixo conforme o espaço na viewport.
+  useEffect(() => {
+    if (!aberto || !inputRef.current) return;
+    const rect = inputRef.current.getBoundingClientRect();
+    const espacoAbaixo = window.innerHeight - rect.bottom;
+    const alturaEstimada = Math.min(240, resultados.length * 56 + 8);
+    // Abre pra cima se faltar espaço abaixo e houver espaço acima suficiente.
+    setParaCima(espacoAbaixo < alturaEstimada + 16 && rect.top > alturaEstimada);
+  }, [aberto, busca, resultados.length]);
 
   const adicionar = (nome) => {
     if (!valor.includes(nome)) onChange([...valor, nome]);
@@ -23,20 +35,26 @@ export default function DeplecaoMedicamentos({ valor = [], onChange }) {
   };
   const remover = (nome) => onChange(valor.filter((m) => m !== nome));
 
+  const dropdownPos = paraCima
+    ? { bottom: "100%", marginBottom: 4 }
+    : { top: "100%", marginTop: 4 };
+
   return (
     <div>
       {/* Busca */}
       <div style={{ position: "relative", marginBottom: 12 }}>
         <Search size={15} style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "var(--inkFaint)" }} />
         <input
+          ref={inputRef}
           value={busca}
           onChange={(e) => { setBusca(e.target.value); setAberto(true); }}
           onFocus={() => setAberto(true)}
+          onBlur={() => setTimeout(() => setAberto(false), 150)}
           placeholder="Buscar medicamento do paciente…"
           style={{ width: "100%", padding: "10px 14px 10px 34px", borderRadius: 10, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13.5, boxSizing: "border-box" }}
         />
         {aberto && busca && resultados.length > 0 && (
-          <div style={{ position: "absolute", top: "100%", left: 0, right: 0, marginTop: 4, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.12)", zIndex: 20, maxHeight: 240, overflowY: "auto" }}>
+          <div style={{ position: "absolute", ...dropdownPos, left: 0, right: 0, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.12)", zIndex: 50, maxHeight: 240, overflowY: "auto" }}>
             {resultados.map((m) => (
               <button key={m.nome} onClick={() => adicionar(m.nome)}
                 style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px", textAlign: "left", borderBottom: "1px solid var(--line)" }}
