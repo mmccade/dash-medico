@@ -19,16 +19,19 @@ import { useToast } from "../lib/toast.jsx";
 import { imc, br, fmtData, primeiroCiclo, ultimoCiclo, perdaPeso, mesesTrat, parseNum, imcMeta, metaPesoBatida, metaVisceralBatida, massaMagraKg, gerarTimeline, gerarResumo, progressoMetaFinal, deltaMetaMes, metaDoMes } from "../lib/utils.js";
 import { listarExames } from "../services/db-exames.js";
 import { getSugestoes } from "../lib/biomarcadores.js";
-import { baixarPdfSuplemento } from "../services/pdf-clinico.js";
 import { useAuth } from "../lib/auth.jsx";
 import { Avatar, Toggle } from "../components/ui.jsx";
 import { LinhaChart } from "../components/charts.jsx";
 import { useIsMobile } from "../components/Shell.jsx";
 import { baixarPdfPaciente, baixarPdfMetaBatida, baixarPdfCiclo } from "../services/pdf.js";
-import { baixarPdfPlano } from "../services/pdf-clinico.js";
 import { validateCiclo, validatePaciente, primeiroErro } from "../lib/validate.js";
 import { InputDecimal, InputInteiro, InputData, numeroParaMascara } from "../components/inputs.jsx";
 import ModalDesativar from "../components/ModalDesativar.jsx";
+
+// PDF clínico: carregado lazy para evitar ciclo de dependência com biomarcadores
+const _pdfClinico = () => import("../services/pdf-clinico.js");
+const baixarPdfPlano = (...args) => _pdfClinico().then((m) => m.baixarPdfPlano(...args));
+const baixarPdfSuplemento = (...args) => _pdfClinico().then((m) => m.baixarPdfSuplemento(...args));
 
 // ─── Tela de sucesso pós-edição ──────────────────────────────
 function TelaEdicaoSucesso({ onFechar }) {
