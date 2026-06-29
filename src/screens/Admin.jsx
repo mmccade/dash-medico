@@ -1,20 +1,20 @@
 // src/screens/Admin.jsx
 import { useState, useEffect, useRef } from "react";
-import { Shield, Users, DollarSign, Loader2, LogOut, Sun, Moon, Plus, Trash2, X, Eye, EyeOff, RotateCcw, Clock, AlertTriangle } from "lucide-react";
+import { Shield, Users, DollarSign, Loader2, LogOut, Sun, Moon, Plus, Trash2, X, Eye, EyeOff, RotateCcw, Clock, AlertTriangle, MessageSquare, Check } from "lucide-react";
 import { listarTodosUsuarios, definirPlano, excluirUsuario, restaurarUsuario, excluirPermanente, contarPacientesPorUsuario, VALOR_PLANO, DIAS_PLANO } from "../services/db.js";
 import { sair } from "../services/auth.js";
 import { useTema } from "../lib/theme.jsx";
 import { useAuth } from "../lib/auth.jsx";
 import { br } from "../lib/utils.js";
 import { validateNovoUsuario, primeiroErro } from "../lib/validate.js";
-import { doc, setDoc, serverTimestamp, getFirestore, Timestamp } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp, getFirestore, Timestamp, collection, getDocs, orderBy, query, updateDoc } from "firebase/firestore";
 import { initializeApp, getApps, deleteApp } from "firebase/app";
 import { getAuth, createUserWithEmailAndPassword } from "firebase/auth";
 
 const PLANOS = ["nenhum", "semanal", "mensal", "trimestral", "semestral", "anual", "vitalicio"];
 const LABEL  = { nenhum: "Sem plano", semanal: "Semanal", mensal: "Mensal", trimestral: "Trimestral", semestral: "Semestral", anual: "Anual", vitalicio: "Vitalício" };
-const ABAS   = ["ativos", "desativados", "cakto", "admin"];
-const LABEL_ABA = { ativos: "Ativos", desativados: "Desativados", cakto: "Cakto", admin: "Admin" };
+const ABAS      = ["ativos", "desativados", "cakto", "sugestoes", "admin"];
+const LABEL_ABA = { ativos: "Ativos", desativados: "Desativados", cakto: "Cakto", sugestoes: "Sugestões", admin: "Admin" };
 
 function fmtData(val) {
   if (!val) return null;
@@ -223,7 +223,20 @@ export default function Admin() {
   const [excluindo, setExcluindo]           = useState(null);
   const [showModal, setShowModal]           = useState(false);
   const [aba, setAba]                       = useState("ativos");
-  const [modalExcluir, setModalExcluir]     = useState(null); // usuario a excluir permanentemente
+  const [modalExcluir, setModalExcluir]     = useState(null);
+  const [sugestoes, setSugestoes]           = useState([]);
+  const [carregandoSug, setCarregandoSug]   = useState(false);
+
+  // Carrega sugestões quando a aba é selecionada
+  useEffect(() => {
+    if (aba !== "sugestoes") return;
+    setCarregandoSug(true);
+    const db = getFirestore();
+    getDocs(query(collection(db, "sugestoes"), orderBy("criadoEm", "desc")))
+      .then((snap) => setSugestoes(snap.docs.map((d) => ({ id: d.id, ...d.data() }))))
+      .catch(console.error)
+      .finally(() => setCarregandoSug(false));
+  }, [aba]);
 
   const carregar = () => {
     setCarregando(true);
@@ -363,7 +376,52 @@ export default function Admin() {
           ))}
         </div>
 
-        {carregando ? (
+        {/* ─── Aba sugestões ─── */}
+        {aba === "sugestoes" && (
+          carregandoSug ? (
+            <div style={{ display: "flex", justifyContent: "center", padding: 60 }}>
+              <Loader2 size={28} className="spin" color="var(--inkFaint)" />
+            </div>
+          ) : sugestoes.length === 0 ? (
+            <div className="card" style={{ padding: 48, textAlign: "center", color: "var(--inkFaint)" }}>
+              Nenhuma sugestão recebida ainda.
+            </div>
+          ) : (
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              {sugestoes.map((s) => (
+                <div key={s.id} className="card" style={{ padding: "16px 20px", opacity: s.lida ? 0.6 : 1 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 12, marginBottom: 8 }}>
+                    <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", padding: "2px 10px", borderRadius: 99, background: "var(--brandSoft)", color: "var(--brand)" }}>
+                        {s.categoria || "outro"}
+                      </span>
+                      {!s.lida && <span style={{ fontSize: 10, fontWeight: 700, color: "#d4a017", background: "#fff8e6", padding: "2px 8px", borderRadius: 99 }}>NOVO</span>}
+                    </div>
+                    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                      <span style={{ fontSize: 11.5, color: "var(--inkFaint)" }}>
+                        {s.email || "—"} · {s.criadoEm?.toDate ? s.criadoEm.toDate().toLocaleDateString("pt-BR") : ""}
+                      </span>
+                      {!s.lida && (
+                        <button
+                          onClick={async () => {
+                            const db = getFirestore();
+                            await updateDoc(doc(db, "sugestoes", s.id), { lida: true });
+                            setSugestoes((ss) => ss.map((x) => x.id === s.id ? { ...x, lida: true } : x));
+                          }}
+                          style={{ fontSize: 11.5, color: "var(--good)", display: "flex", alignItems: "center", gap: 4, padding: "3px 8px", borderRadius: 7, border: "1px solid var(--good)" }}>
+                          <Check size={12} /> Marcar como lida
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  <div style={{ fontSize: 13.5, color: "var(--ink)", lineHeight: 1.65, whiteSpace: "pre-wrap" }}>{s.texto}</div>
+                </div>
+              ))}
+            </div>
+          )
+        )}
+
+        {aba !== "sugestoes" && (carregando ? (
           <div style={{ display: "flex", justifyContent: "center", padding: 60 }}>
             <Loader2 size={28} className="spin" color="var(--inkFaint)" />
           </div>
@@ -436,7 +494,7 @@ export default function Admin() {
               </tbody>
             </table>
           </div>
-        )}
+        ))}
 
         <p style={{ fontSize: 11.5, color: "var(--inkFaint)", marginTop: 16, lineHeight: 1.6 }}>
           Ao mudar o plano, o prazo de acesso é recalculado automaticamente. Exclusão permanente remove o Firestore — remova o Auth manualmente no console Firebase.
