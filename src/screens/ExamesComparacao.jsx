@@ -4,10 +4,11 @@
 // destaque visual quando sai de fora do range pra dentro (melhora) ou vice-versa.
 
 import { useState } from "react";
-import { TrendingUp, TrendingDown, Minus, ArrowLeft, Sparkles } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, ArrowLeft, Sparkles, FileText } from "lucide-react";
 import { classificar, BIOMARCADORES } from "../lib/biomarcadores.js";
 import { interacoesEntre, sugestoesSinergicas } from "../lib/suplementos.js";
 import { br } from "../lib/utils.js";
+import { baixarPdfComparacao } from "../services/pdf-clinico.js";
 
 // Marcadores onde cair é positivo clinicamente
 const MAIS_BAIXO_MELHOR = new Set([
@@ -49,9 +50,10 @@ function badgeStatus(status) {
   );
 }
 
-export default function ExamesComparacao({ exames = [], genero = "F", onVoltar }) {
+export default function ExamesComparacao({ exames = [], genero = "F", paciente = null, config = {}, onVoltar, onCriarProtocoloSugerido }) {
   const [idxA, setIdxA] = useState(0);
   const [idxB, setIdxB] = useState(Math.min(1, exames.length - 1));
+  const [exportando, setExportando] = useState(false);
 
   if (exames.length < 2) {
     return (
@@ -140,6 +142,30 @@ export default function ExamesComparacao({ exames = [], genero = "F", onVoltar }
           </button>
         )}
         <h2 style={{ fontSize: 17, fontWeight: 700, margin: 0 }}>Comparar exames</h2>
+        {idxA !== idxB && (
+          <button
+            disabled={exportando}
+            onClick={async () => {
+              try {
+                setExportando(true);
+                await baixarPdfComparacao({
+                  paciente,
+                  tituloA: exA.titulo || "Exame anterior",
+                  tituloB: exB.titulo || "Exame recente",
+                  dataA: exA.data,
+                  dataB: exB.data,
+                  linhas,
+                  config,
+                });
+              } finally {
+                setExportando(false);
+              }
+            }}
+            className="btn btn-ghost"
+            style={{ marginLeft: "auto", fontSize: 13, gap: 7 }}>
+            <FileText size={15} /> {exportando ? "Gerando…" : "Exportar comparação"}
+          </button>
+        )}
       </div>
 
       {/* Seletores */}
@@ -208,6 +234,14 @@ export default function ExamesComparacao({ exames = [], genero = "F", onVoltar }
               <div style={{ fontSize: 12, color: "var(--good)", marginTop: 4 }}>
                 ✓ Sinergismo identificado: {sinergismos.slice(0, 2).map(s => `${s.a} + ${s.b}`).join(" · ")}
               </div>
+            )}
+            {onCriarProtocoloSugerido && (
+              <button
+                onClick={() => onCriarProtocoloSugerido(nomesSupl)}
+                className="btn btn-primary"
+                style={{ marginTop: 14, gap: 7, fontSize: 13 }}>
+                <Sparkles size={14} /> Adicionar a um novo plano de suplementação personalizado
+              </button>
             )}
             <div style={{ fontSize: 11, color: "var(--inkFaint)", marginTop: 10, fontStyle: "italic" }}>
               Sugestões baseadas nos marcadores alterados. Conduta é responsabilidade do médico responsável.
