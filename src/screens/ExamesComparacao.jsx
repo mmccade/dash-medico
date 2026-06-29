@@ -4,8 +4,9 @@
 // destaque visual quando sai de fora do range pra dentro (melhora) ou vice-versa.
 
 import { useState } from "react";
-import { TrendingUp, TrendingDown, Minus, ArrowLeft } from "lucide-react";
-import { classificar } from "../lib/biomarcadores.js";
+import { TrendingUp, TrendingDown, Minus, ArrowLeft, Sparkles } from "lucide-react";
+import { classificar, BIOMARCADORES } from "../lib/biomarcadores.js";
+import { interacoesEntre, sugestoesSinergicas } from "../lib/suplementos.js";
 import { br } from "../lib/utils.js";
 
 // Marcadores onde cair é positivo clinicamente
@@ -163,6 +164,57 @@ export default function ExamesComparacao({ exames = [], genero = "F", onVoltar }
           Selecione dois laudos diferentes para comparar.
         </div>
       )}
+
+      {idxA !== idxB && (() => {
+        // Coleta sugestões de suplemento dos marcadores que pioraram no exame mais recente
+        const sugestoesMap = {};
+        alterados.concat(linhas.filter(l => l.stB && l.stB !== "normal")).forEach((l) => {
+          const bm = BIOMARCADORES.find((b) => b.nome === l.nome);
+          if (!bm?.ideal?.sugestoes) return;
+          const status = l.stB || (l.dir === "piora" ? (MAIS_BAIXO_MELHOR.has(l.nome) ? "alto" : "baixo") : null);
+          const lista = status === "alto" ? bm.ideal.sugestoes.alto : bm.ideal.sugestoes.baixo;
+          if (!lista?.length) return;
+          lista.forEach((s) => {
+            if (!sugestoesMap[s]) sugestoesMap[s] = [];
+            sugestoesMap[s].push(l.nome);
+          });
+        });
+        const sugestoes = Object.entries(sugestoesMap).sort((a, b) => b[1].length - a[1].length).slice(0, 8);
+        if (!sugestoes.length) return null;
+
+        // Calcula sinergismos entre os suplementos sugeridos
+        const nomesSupl = sugestoes.map(([s]) => s);
+        const { sinergismos } = interacoesEntre(nomesSupl);
+
+        return (
+          <div style={{ background: "linear-gradient(135deg, var(--brandSoft,#d1f5e8), var(--surface))", border: "1px solid var(--brand,#0d7a82)22", borderRadius: 14, padding: "18px 20px", marginTop: 8 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+              <Sparkles size={16} color="var(--brand)" />
+              <span style={{ fontSize: 13, fontWeight: 700, color: "var(--brand)", textTransform: "uppercase", letterSpacing: ".4px" }}>
+                Sugestão de suplementação
+              </span>
+            </div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginBottom: sinergismos.length ? 14 : 0 }}>
+              {sugestoes.map(([supl, marcadores]) => (
+                <div key={supl} style={{ background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 10, padding: "8px 12px" }}>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: "var(--ink)" }}>{supl}</div>
+                  <div style={{ fontSize: 11, color: "var(--inkFaint)", marginTop: 2 }}>
+                    indicado por: {marcadores.slice(0, 2).join(", ")}
+                  </div>
+                </div>
+              ))}
+            </div>
+            {sinergismos.length > 0 && (
+              <div style={{ fontSize: 12, color: "var(--good)", marginTop: 4 }}>
+                ✓ Sinergismo identificado: {sinergismos.slice(0, 2).map(s => `${s.a} + ${s.b}`).join(" · ")}
+              </div>
+            )}
+            <div style={{ fontSize: 11, color: "var(--inkFaint)", marginTop: 10, fontStyle: "italic" }}>
+              Sugestões baseadas nos marcadores alterados. Conduta é responsabilidade do médico responsável.
+            </div>
+          </div>
+        );
+      })()}
 
       {idxA !== idxB && (
         <>
