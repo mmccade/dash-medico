@@ -15,7 +15,7 @@ import { useStore } from "../lib/store.jsx";
 import { useToast } from "../lib/toast.jsx";
 import { auth } from "../services/firebase.js";
 import { BIOMARCADORES, CATEGORIAS_EXAME, classificar, getInterpretacao, getSugestoes } from "../lib/biomarcadores.js";
-import { salvarExame, listarExames, excluirExame } from "../services/db-exames.js";
+import { salvarExame, listarExames, excluirExame, atualizarExame } from "../services/db-exames.js";
 import { baixarPdfExames } from "../services/pdf-clinico.js";
 import SeletorPaciente from "../components/SeletorPaciente.jsx";
 
@@ -226,14 +226,33 @@ function ModalLeitura({ onConfirmar, onFechar, genero = "M" }) {
 }
 
 // ─── Card de exame ─────────────────────────────────────────────
-function CardExame({ exame, genero, aberto, onToggle, onExcluir, exameAnterior }) {
+function CardExame({ exame, genero, aberto, onToggle, onExcluir, onRenomear, exameAnterior }) {
+  const [editandoTitulo, setEditandoTitulo] = useState(false);
+  const [novoTitulo, setNovoTitulo] = useState(exame.titulo || "");
   const alteracoes = exame.marcadores?.filter((m) => { const s = classificar(m.nome, m.valor, genero); return s && s !== "normal"; });
   return (
     <div className="card" style={{ overflow: "hidden", borderColor: aberto ? "var(--brand)" : "var(--line)" }}>
       <button onClick={onToggle} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "15px 20px", textAlign: "left" }}>
         <span style={{ display: "flex", alignItems: "center", gap: 12, flex: 1, flexWrap: "wrap" }}>
           <span>
-            <span style={{ fontSize: 15, fontWeight: 600 }}>{exame.titulo}</span>
+            {editandoTitulo ? (
+              <span onClick={(e) => e.stopPropagation()} style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <input value={novoTitulo} onChange={(e) => setNovoTitulo(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { onRenomear?.(novoTitulo); setEditandoTitulo(false); } if (e.key === "Escape") setEditandoTitulo(false); }}
+                  style={{ fontSize: 14, fontWeight: 600, padding: "4px 8px", borderRadius: 7, border: "1px solid var(--brand)", background: "var(--surface)", width: 200 }}
+                  autoFocus />
+                <button onClick={(e) => { e.stopPropagation(); onRenomear?.(novoTitulo); setEditandoTitulo(false); }}
+                  style={{ fontSize: 12, color: "var(--good)", fontWeight: 700, padding: "3px 8px", borderRadius: 7, border: "1px solid var(--good)" }}>✓</button>
+              </span>
+            ) : (
+              <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <span style={{ fontSize: 15, fontWeight: 600 }}>{exame.titulo}</span>
+                {onRenomear && (
+                  <button onClick={(e) => { e.stopPropagation(); setEditandoTitulo(true); }}
+                    style={{ color: "var(--inkFaint)", padding: "2px 6px", borderRadius: 6, fontSize: 11 }} title="Renomear">✎</button>
+                )}
+              </span>
+            )}
             {exame.data && <span style={{ fontSize: 12, color: "var(--inkFaint)", display: "block" }}>{new Date(exame.data + "T12:00:00").toLocaleDateString("pt-BR")}</span>}
           </span>
           <span style={{ fontSize: 12, color: "var(--inkFaint)" }}>{exame.marcadores?.length || 0} marcadores</span>
@@ -444,6 +463,10 @@ export default function Exames({ pacienteId, pacienteGenero = "M", pacienteNome,
               aberto={abaAberta === exame.id}
               onToggle={() => setAbaAberta(abaAberta === exame.id ? null : exame.id)}
               onExcluir={global ? null : () => handleExcluir(exame.id)}
+              onRenomear={global || !user?.uid ? null : async (novoTitulo) => {
+                await atualizarExame(user.uid, pacienteId, exame.id, { titulo: novoTitulo });
+                setLista((ls) => ls.map((e) => e.id === exame.id ? { ...e, titulo: novoTitulo } : e));
+              }}
               exameAnterior={global ? null : listaExibida[idx + 1] || null}
             />
           ))}
