@@ -48,6 +48,14 @@ function fmtDataBr(iso) {
   catch { return iso; }
 }
 
+// Wrapper padrão de página (mesmo container usado por htmlExames/htmlAnamnese).
+function PAGINA(corpo) {
+  return `
+    <div style="width:720px;padding:32px;font-family:'Geist',Arial,sans-serif;color:#27322f;background:#fff;box-sizing:border-box">
+      ${corpo}
+    </div>`;
+}
+
 // ─── PDF de Exames ────────────────────────────────────────────
 export function htmlExames({ paciente, exames, genero, config }) {
   const blocoPaciente = paciente ? `
@@ -302,4 +310,87 @@ export function htmlSuplemento({ paciente, suplementos = [], config }) {
 export async function baixarPdfSuplemento({ paciente, suplementos, config }) {
   const slug = (s) => (s || "paciente").replace(/[^a-zA-Z0-9]+/g, "_");
   await gerar(htmlSuplemento({ paciente, suplementos, config }), `Suplementos_${slug(paciente?.nome)}.pdf`);
+}
+
+// ─── PDF de Comparação de Exames ─────────────────────────────
+// Recebe as linhas já calculadas pelo componente ExamesComparacao
+// (nome, valA, valB, delta, dir, stA, stB, unidade) + títulos dos laudos.
+const MAIS_BAIXO_MELHOR_PDF = new Set([
+  "Glicose", "HbA1c", "HOMA-IR", "Colesterol total", "LDL",
+  "Triglicerídeos", "PCR", "TSH", "Insulina", "Peso",
+  "Gordura corporal", "Gordura visceral",
+]);
+
+function corDir(dir) {
+  if (dir === "melhora") return "#15803d";
+  if (dir === "piora") return "#c0392b";
+  return "#8a9693";
+}
+function setaTxt(dir) {
+  if (dir === "melhora") return "▲";
+  if (dir === "piora") return "▼";
+  return "—";
+}
+
+export function htmlComparacao({ paciente, tituloA, tituloB, dataA, dataB, linhas = [], resumo, config }) {
+  const brloc = (n) => (n == null ? "" : String(n).replace(".", ","));
+  const tabela = (ls, titulo, cor) => {
+    if (!ls.length) return "";
+    const rows = ls.map((l) => `
+      <tr style="page-break-inside:avoid">
+        <td style="padding:8px 12px;border-bottom:1px solid #eef2f2;font-size:12.5px;font-weight:600;color:#27322f">${esc(l.nome)}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #eef2f2;font-size:12.5px;text-align:right;color:${l.stA && l.stA !== "normal" ? (l.stA === "alto" ? "#c0392b" : "#1d6fa8") : "#27322f"}">${l.valA != null ? `${brloc(l.valA)} ${esc(l.unidade || "")}` : "—"}${l.stA && l.stA !== "normal" ? ` <b style="font-size:9.5px;text-transform:uppercase">(${esc(l.stA)})</b>` : ""}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #eef2f2;font-size:12px;text-align:center;font-weight:700;color:${corDir(l.dir)}">${l.delta != null ? `${l.delta > 0 ? "+" : ""}${brloc(l.delta)}` : "—"}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #eef2f2;font-size:12.5px;text-align:right;color:${l.stB && l.stB !== "normal" ? (l.stB === "alto" ? "#c0392b" : "#1d6fa8") : "#27322f"}">${l.valB != null ? `${brloc(l.valB)} ${esc(l.unidade || "")}` : "—"}${l.stB && l.stB !== "normal" ? ` <b style="font-size:9.5px;text-transform:uppercase">(${esc(l.stB)})</b>` : ""}</td>
+        <td style="padding:8px 12px;border-bottom:1px solid #eef2f2;font-size:12px;text-align:center;color:${corDir(l.dir)}">${setaTxt(l.dir)}</td>
+      </tr>`).join("");
+    return `
+      <div style="font-size:13.5px;font-weight:700;color:${cor};margin:18px 0 8px">${esc(titulo)} (${ls.length})</div>
+      <table style="width:100%;border-collapse:collapse;border:1px solid #eef2f2;border-radius:10px;overflow:hidden">
+        <thead><tr style="background:#f0f4f4">
+          <th style="padding:8px 12px;font-size:10.5px;color:#5a6663;text-align:left;text-transform:uppercase;letter-spacing:.4px">Marcador</th>
+          <th style="padding:8px 12px;font-size:10.5px;color:#5a6663;text-align:right;text-transform:uppercase;letter-spacing:.4px">${esc(tituloA)}</th>
+          <th style="padding:8px 12px;font-size:10.5px;color:#5a6663;text-align:center;text-transform:uppercase;letter-spacing:.4px">Δ</th>
+          <th style="padding:8px 12px;font-size:10.5px;color:#5a6663;text-align:right;text-transform:uppercase;letter-spacing:.4px">${esc(tituloB)}</th>
+          <th style="padding:8px 12px;font-size:10.5px;color:#5a6663;text-align:center;text-transform:uppercase;letter-spacing:.4px">Tend.</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+  };
+
+  const pioraram  = linhas.filter((l) => l.dir === "piora");
+  const melhoraram = linhas.filter((l) => l.dir === "melhora");
+  const estaveis  = linhas.filter((l) => l.dir === "estavel" || l.dir == null);
+
+  const cards = resumo ? `
+    <div style="display:flex;gap:10px;margin-bottom:18px">
+      <div style="flex:1;background:#eaf7f0;border-radius:10px;padding:12px;text-align:center"><div style="font-size:20px;font-weight:700;color:#15803d">${melhoraram.length}</div><div style="font-size:11px;color:#5a6663">Melhoraram</div></div>
+      <div style="flex:1;background:#fdecec;border-radius:10px;padding:12px;text-align:center"><div style="font-size:20px;font-weight:700;color:#c0392b">${pioraram.length}</div><div style="font-size:11px;color:#5a6663">Pioraram</div></div>
+      <div style="flex:1;background:#f0f4f4;border-radius:10px;padding:12px;text-align:center"><div style="font-size:20px;font-weight:700;color:#8a9693">${estaveis.length}</div><div style="font-size:11px;color:#5a6663">Estáveis</div></div>
+    </div>` : "";
+
+  const corpo = `
+    ${cabecalho(config, "Comparação de exames")}
+    ${paciente ? `<div style="background:#f0f4f4;border-radius:10px;padding:16px 18px;margin-bottom:18px">
+      <div style="font-size:18px;font-weight:700;color:#27322f">${esc(paciente.nome)}</div>
+      ${paciente.idade ? `<div style="font-size:13px;color:#5a6663;margin-top:4px">${paciente.idade} anos · ${esc(paciente.sexo || "")}</div>` : ""}
+    </div>` : ""}
+    <div style="font-size:13px;color:#5a6663;margin-bottom:16px">
+      <b>${esc(tituloA)}</b>${dataA ? ` (${fmtDataBr(dataA)})` : ""} → <b>${esc(tituloB)}</b>${dataB ? ` (${fmtDataBr(dataB)})` : ""}
+    </div>
+    ${cards}
+    ${tabela(pioraram,  "Pioraram", "#c0392b")}
+    ${tabela(melhoraram, "Melhoraram", "#15803d")}
+    ${tabela(estaveis,  "Sem mudança significativa", "#8a9693")}
+    ${rodape(config)}`;
+
+  return PAGINA(corpo);
+}
+
+export async function baixarPdfComparacao({ paciente, tituloA, tituloB, dataA, dataB, linhas, config }) {
+  const slug = (s) => (s || "paciente").replace(/[^a-zA-Z0-9]+/g, "_");
+  await gerar(
+    htmlComparacao({ paciente, tituloA, tituloB, dataA, dataB, linhas, resumo: true, config }),
+    `Comparacao_exames_${slug(paciente?.nome)}.pdf`
+  );
 }
