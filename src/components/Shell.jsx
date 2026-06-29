@@ -2,7 +2,7 @@
 // + Item "Relatório" no nav
 
 import { useState, useEffect } from "react";
-import { LayoutDashboard, Users, TrendingUp, Settings, Sun, Moon, LogOut, UserCircle, Sparkles, Bell, BarChart3, FlaskConical, ClipboardList } from "lucide-react";
+import { LayoutDashboard, Users, TrendingUp, Settings, Sun, Moon, LogOut, UserCircle, Sparkles, Bell, BarChart3, FlaskConical, ClipboardList, MessageSquare } from "lucide-react";
 import { useTema } from "../lib/theme.jsx";
 import { useStore } from "../lib/store.jsx";
 import { useAuth } from "../lib/auth.jsx";
@@ -12,11 +12,12 @@ import Logo from "./Logo.jsx";
 const NAV = [
   { id: "dashboard", label: "Visão geral", Icon: LayoutDashboard },
   { id: "pacientes", label: "Pacientes",   Icon: Users, alias: ["ficha", "novociclo", "novopaciente", "importar"] },
-  { id: "exames",    label: "Exames",      Icon: FlaskConical },
+  { id: "exames",    label: "Exames laboratoriais", Icon: FlaskConical },
   { id: "anamnese",  label: "Anamnese",    Icon: ClipboardList },
   { id: "alertas",   label: "Alertas",     Icon: Bell, badge: true },
   { id: "evolucao",  label: "Evolução",    Icon: TrendingUp },
   { id: "relatorio", label: "Relatório",   Icon: BarChart3 },
+  { id: "sugestoes", label: "Sugestões",   Icon: MessageSquare },
   { id: "config",    label: "Configurações", Icon: Settings },
 ];
 
