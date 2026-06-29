@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Upload, Plus, Search, Download, ArrowUpDown, CheckSquare, Square, ListChecks, Trash2, RotateCcw, AlertTriangle, Loader2 } from "lucide-react";
 import { useStore } from "../lib/store.jsx";
 import { useToast } from "../lib/toast.jsx";
-import { ultimoCiclo, perdaPeso, mesesTrat, br, faixaEtaria } from "../lib/utils.js";
+import { ultimoCiclo, perdaPeso, mesesTrat, br, faixaEtaria, diasSemCiclo } from "../lib/utils.js";
 import { Avatar, Toggle, Chip } from "../components/ui.jsx";
 import { useIsMobile } from "../components/Shell.jsx";
 import ModalDesativar from "../components/ModalDesativar.jsx";
@@ -303,8 +303,8 @@ export default function Pacientes({ navegar }) {
       {/* Lista */}
       <div className="card" style={{ overflow: "hidden" }}>
         {!isMobile && !modoSelecao && aba !== "lixeira" && (
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 150px", padding: "12px 20px", borderBottom: "1px solid var(--line)", fontSize: 11.5, fontWeight: 600, color: "var(--inkFaint)", textTransform: "uppercase", letterSpacing: 0.5 }}>
-            <span>Paciente</span><span>Tempo</span><span>Peso atual</span><span>Evolução</span><span>Ações</span>
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 80px 100px 100px 110px 130px", padding: "12px 20px", borderBottom: "1px solid var(--line)", fontSize: 11.5, fontWeight: 600, color: "var(--inkFaint)", textTransform: "uppercase", letterSpacing: 0.5 }}>
+            <span>Paciente</span><span>Tempo</span><span>Peso atual</span><span>Evolução</span><span>Último ciclo</span><span>Ações</span>
           </div>
         )}
         {!isMobile && aba === "lixeira" && lista.length > 0 && (
@@ -375,10 +375,13 @@ export default function Pacientes({ navegar }) {
             );
           }
 
+          const diasUltimo = diasSemCiclo(p);
+          const alertaDias = diasUltimo != null && diasUltimo > 45 && p.ativo;
+
           // ── Lista normal ──
           if (isMobile || modoSelecao) {
             return (
-              <div key={p.id} className={animClass} style={{ padding: "14px 16px", borderBottom: "1px solid var(--line)", background: selecionado ? "var(--brandSoft)" : p.ativo ? "transparent" : "var(--surface2)", display: "flex", alignItems: "center", gap: 11 }}>
+              <div key={p.id} className={animClass} style={{ padding: "14px 16px", borderBottom: "1px solid var(--line)", background: selecionado ? "var(--brandSoft)" : alertaDias ? "var(--warnSoft,#fff8e6)" : p.ativo ? "transparent" : "var(--surface2)", display: "flex", alignItems: "center", gap: 11 }}>
                 {modoSelecao && (
                   <button onClick={() => toggleSelecao(p.id)} style={{ color: "var(--brand)" }}>
                     {selecionado ? <CheckSquare size={20} /> : <Square size={20} />}
@@ -386,16 +389,28 @@ export default function Pacientes({ navegar }) {
                 )}
                 <button onClick={() => modoSelecao ? toggleSelecao(p.id) : navegar("ficha", p.id)} style={{ display: "flex", alignItems: "center", gap: 12, textAlign: "left", flex: 1, minWidth: 0 }}>
                   <Avatar nome={p.nome} />
-                  <span style={{ minWidth: 0 }}>
+                  <span style={{ minWidth: 0, flex: 1 }}>
                     <span style={{ fontSize: 14, fontWeight: 600, display: "block", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.nome}</span>
-                    <span style={{ fontSize: 12, color: "var(--inkFaint)" }}>
-                      {p.idade} anos · {p.sexo}{temCiclo && <> · {br(ultimoCiclo(p).peso)} kg</>}
+                    <span style={{ fontSize: 12, color: "var(--inkFaint)", display: "flex", gap: 6, flexWrap: "wrap", marginTop: 2 }}>
+                      <span>{p.idade} anos · {p.sexo}</span>
+                      {temCiclo && <span style={{ fontWeight: 600, color: "var(--ink)" }}>{br(ultimoCiclo(p).peso)} kg</span>}
+                      {p.ciclos.length > 1 && <span style={{ color: "var(--good)", fontWeight: 600 }}>−{br(perdaPeso(p))} kg</span>}
                     </span>
-                    {!p.ativo && labelMotivo(p.motivoDesativacao) && (
-                      <span style={{ fontSize: 11, color: "var(--warn)", fontWeight: 600, display: "block", marginTop: 1 }}>
-                        {labelMotivo(p.motivoDesativacao)}{p.detalhesDesativacao && p.motivoDesativacao !== "meta_batida" && p.motivoDesativacao !== "sumiu" ? ` · ${p.detalhesDesativacao}` : ""}
-                      </span>
-                    )}
+                    <span style={{ fontSize: 11.5, marginTop: 3, display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {alertaDias && (
+                        <span style={{ color: "#b45309", fontWeight: 700, background: "#fff8e6", padding: "1px 7px", borderRadius: 99 }}>
+                          ⚠ {diasUltimo}d sem ciclo
+                        </span>
+                      )}
+                      {!alertaDias && diasUltimo != null && diasUltimo > 0 && (
+                        <span style={{ color: "var(--inkFaint)" }}>há {diasUltimo}d</span>
+                      )}
+                      {!p.ativo && labelMotivo(p.motivoDesativacao) && (
+                        <span style={{ color: "var(--warn)", fontWeight: 600 }}>
+                          {labelMotivo(p.motivoDesativacao)}
+                        </span>
+                      )}
+                    </span>
                   </span>
                 </button>
                 {!modoSelecao && (
@@ -411,7 +426,7 @@ export default function Pacientes({ navegar }) {
           }
 
           return (
-            <div key={p.id} className={animClass} style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr 150px", padding: "14px 20px", alignItems: "center", borderBottom: "1px solid var(--line)", background: p.ativo ? "transparent" : "var(--surface2)" }}>
+            <div key={p.id} className={animClass} style={{ display: "grid", gridTemplateColumns: "2fr 80px 100px 100px 110px 130px", padding: "14px 20px", alignItems: "center", borderBottom: "1px solid var(--line)", background: alertaDias ? "var(--warnSoft,#fff8e6)" : p.ativo ? "transparent" : "var(--surface2)" }}>
               <button onClick={() => navegar("ficha", p.id)} style={{ display: "flex", alignItems: "center", gap: 13, textAlign: "left" }}>
                 <Avatar nome={p.nome} />
                 <span>
@@ -427,6 +442,11 @@ export default function Pacientes({ navegar }) {
               <span style={{ fontSize: 13.5, color: "var(--inkSoft)" }}>{mesesTrat(p.inicio)} meses</span>
               <span className="tnum" style={{ fontSize: 13.5 }}>{temCiclo ? br(ultimoCiclo(p).peso) + " kg" : "—"}</span>
               <span className="tnum" style={{ fontSize: 13.5, fontWeight: 600, color: p.ciclos.length > 1 ? "var(--good)" : "var(--inkFaint)" }}>{ev}</span>
+              <span style={{ fontSize: 12.5 }}>
+                {dias == null ? <span style={{ color: "var(--inkFaint)" }}>—</span>
+                  : alertaDias ? <span style={{ color: "#b45309", fontWeight: 700 }}>{diasUltimo}d</span>
+                  : <span style={{ color: diasUltimo > 30 ? "var(--warn)" : "var(--inkFaint)" }}>{diasUltimo}d atrás</span>}
+              </span>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <Toggle on={p.ativo} onClick={() => handleToggle(p)} />
                 <button onClick={() => handleMoverLixeira(p)} title="Mover para lixeira" style={{ background: "none", border: "none", cursor: "pointer", color: "var(--inkFaint)", padding: 5, borderRadius: 7 }}>
