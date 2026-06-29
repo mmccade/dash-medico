@@ -7,7 +7,9 @@
 
 import { useState, useEffect, lazy, Suspense } from "react";
 import { ArrowLeft, Trash2, Stethoscope, FileText, ChevronDown, Pencil, X, Loader2, Check, Trophy, Activity, FlaskConical, ClipboardList, Pill, Target, Clock, GitCompare, Plus, Minus, Sparkles } from "lucide-react";
-const PlanejadorSuplementos = lazy(() => import("../components/PlanejadorSuplementos.jsx"));
+// PlanejadorSuplementos: import estático. Protocolo.jsx (importado estaticamente
+// aqui) já o importa de forma estática; o lazy só criava conflito de chunk/TDZ.
+import PlanejadorSuplementos from "../components/PlanejadorSuplementos.jsx";
 import Exames from "./Exames.jsx";
 const ExamesComparacao = lazy(() => import("./ExamesComparacao.jsx"));
 import Anamnese from "./Anamnese.jsx";
@@ -28,10 +30,12 @@ import { validateCiclo, validatePaciente, primeiroErro } from "../lib/validate.j
 import { InputDecimal, InputInteiro, InputData, numeroParaMascara } from "../components/inputs.jsx";
 import ModalDesativar from "../components/ModalDesativar.jsx";
 
-// PDF clínico: carregado lazy para evitar ciclo de dependência com biomarcadores
-const _pdfClinico = () => import("../services/pdf-clinico.js");
-const baixarPdfPlano = (...args) => _pdfClinico().then((m) => m.baixarPdfPlano(...args));
-const baixarPdfSuplemento = (...args) => _pdfClinico().then((m) => m.baixarPdfSuplemento(...args));
+// PDF clínico: import estático. Antes era dinâmico (lazy), mas Exames.jsx e
+// Anamnese.jsx — importados estaticamente aqui — já importam este módulo de
+// forma estática. A mistura estático+dinâmico fazia o Rollup colapsar tudo no
+// mesmo chunk com ordem de inicialização incorreta, gerando o
+// "ReferenceError: Cannot access 'X' before initialization" (TDZ) ao abrir a Ficha.
+import { baixarPdfPlano, baixarPdfSuplemento } from "../services/pdf-clinico.js";
 
 // ─── Tela de sucesso pós-edição ──────────────────────────────
 function TelaEdicaoSucesso({ onFechar }) {
@@ -950,13 +954,11 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
 
       <div className="card" style={{ padding: "18px 20px" }}>
         <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>Protocolo de suplementação</div>
-        <Suspense fallback={<div style={{ padding: 20, textAlign: "center" }}><Loader2 size={18} className="spin" color="var(--inkFaint)" /></div>}>
-          <PlanejadorSuplementos
-            valor={p.suplementosProtocolo || []}
-            onChange={async (lista) => await editarPaciente(p.id, { suplementosProtocolo: lista })}
-            sugestoesDepleção={sugestoesDosExames}
-          />
-        </Suspense>
+        <PlanejadorSuplementos
+          valor={p.suplementosProtocolo || []}
+          onChange={async (lista) => await editarPaciente(p.id, { suplementosProtocolo: lista })}
+          sugestoesDepleção={sugestoesDosExames}
+        />
       </div>
     </div>
   );
