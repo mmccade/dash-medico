@@ -65,7 +65,7 @@ function SugestoesMarcador({ nome, status }) {
 }
 
 // ─── Modal de upload + leitura ─────────────────────────────────
-function ModalLeitura({ onConfirmar, onFechar }) {
+function ModalLeitura({ onConfirmar, onFechar, genero = "M" }) {
   const [arquivo, setArquivo] = useState(null);
   const [preview, setPreview] = useState(null);
   const [tipoArquivo, setTipoArquivo] = useState(null);
@@ -200,7 +200,7 @@ function ModalLeitura({ onConfirmar, onFechar }) {
             {marcadores.length === 0 && <div style={{ padding: 20, textAlign: "center", color: "var(--inkFaint)", fontSize: 13, marginBottom: 12 }}>Nenhum marcador. Adicione manualmente.</div>}
             <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
               {marcadores.map((m, i) => {
-                const st = classificar(m.nome, m.valor, "M");
+                const st = classificar(m.nome, m.valor, genero);
                 return (
                   <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 120px 80px auto", gap: 8, alignItems: "center", padding: "8px 12px", background: "var(--surface2)", borderRadius: 9 }}>
                     <select value={m.nome} onChange={(e) => atualizar(i, { ...m, nome: e.target.value })} style={{ padding: "7px 10px", borderRadius: 8, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13, width: "100%", boxSizing: "border-box" }}>
@@ -450,7 +450,7 @@ export default function Exames({ pacienteId, pacienteGenero = "M", pacienteNome,
         </div>
       )}
 
-      {modal && <ModalLeitura onConfirmar={global ? handleConfirmarGlobal : handleConfirmarVinculado} onFechar={() => setModal(false)} />}
+      {modal && <ModalLeitura onConfirmar={global ? handleConfirmarGlobal : handleConfirmarVinculado} onFechar={() => setModal(false)} genero={pacienteGenero} />}
       {modalVincular && (
         <ModalVincular
           pacientes={pacientes.filter((p) => !p.excluidoEm)}
