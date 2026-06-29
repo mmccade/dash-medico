@@ -10,6 +10,7 @@ import { ArrowLeft, Trash2, Stethoscope, FileText, ChevronDown, Pencil, X, Loade
 // PlanejadorSuplementos: import estático. Protocolo.jsx (importado estaticamente
 // aqui) já o importa de forma estática; o lazy só criava conflito de chunk/TDZ.
 import PlanejadorSuplementos from "../components/PlanejadorSuplementos.jsx";
+import GerenciadorProtocolos from "../components/GerenciadorProtocolos.jsx";
 import Exames from "./Exames.jsx";
 const ExamesComparacao = lazy(() => import("./ExamesComparacao.jsx"));
 import Anamnese from "./Anamnese.jsx";
@@ -602,7 +603,7 @@ function Delta({ atual, anterior, bom = "baixo", unit = "" }) {
 
 // ─── Tela principal ───────────────────────────────────────────
 export default function Ficha({ pacienteId, navegar, abaInicial }) {
-  const { getPaciente, config, editarCiclo, excluirCiclo, editarPaciente, toggleAtivo, desativarPaciente, moverParaLixeira } = useStore();
+  const { getPaciente, config, editarCiclo, excluirCiclo, editarPaciente, toggleAtivo, desativarPaciente, moverParaLixeira, salvarProtocolo, removerProtocolo } = useStore();
   const { user } = useAuth();
   const toast = useToast();
   const isMobile = useIsMobile();
@@ -616,6 +617,7 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
   const [animarSaindo, setAnimarSaindo] = useState(false);
   const [abaAtiva, setAbaAtiva] = useState(abaInicial || "ciclos");
   const [subViewExames, setSubViewExames] = useState("lista"); // "lista" | "comparar"
+  const [protocoloSugerido, setProtocoloSugerido] = useState(null); // nomes vindos da comparação de exames
   const [examesLista, setExamesLista] = useState([]);
 
   // Carrega exames do paciente para timeline, resumo e comparação
@@ -739,13 +741,10 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
             </button>
           )}
           <button className="btn btn-ghost" onClick={handleMoverLixeira} style={{ flex: isMobile ? 1 : "none", color: "var(--inkFaint)" }}>
-            <Trash2 size={15} /> Lixeira
+            <Trash2 size={15} /> Mover para lixeira
           </button>
-          <button className="btn btn-ghost" style={{ flex: isMobile ? 1 : "none" }} onClick={() => navegar("novociclo", p.id)}>
+          <button className="btn btn-primary" style={{ flex: isMobile ? 1 : "none" }} onClick={() => navegar("novociclo", p.id)}>
             <Stethoscope size={16} /> Novo ciclo
-          </button>
-          <button className="btn btn-primary" style={{ flex: isMobile ? 1 : "none" }} onClick={() => p.ciclos.length ? setModalPdf(true) : toast("Paciente sem ciclos")}>
-            <FileText size={16} /> PDF do paciente
           </button>
         </div>
       </div>
@@ -840,7 +839,14 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
       <ExamesComparacao
         exames={examesLista}
         genero={genero}
+        paciente={p}
+        config={config}
         onVoltar={() => setSubViewExames("lista")}
+        onCriarProtocoloSugerido={(nomes) => {
+          setProtocoloSugerido(nomes);
+          setSubViewExames("lista");
+          setAbaAtiva("suplementos");
+        }}
       />
     </Suspense>
   ) : (
@@ -921,15 +927,6 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
 
   const PainelSuplemento = (
     <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-      {/* Botão PDF */}
-      {(p.suplementosProtocolo?.length > 0) && (
-        <div style={{ display: "flex", justifyContent: "flex-end" }}>
-          <button className="btn btn-ghost" style={{ fontSize: 13, gap: 7 }}
-            onClick={() => baixarPdfSuplemento({ paciente: p, suplementos: p.suplementosProtocolo, config })}>
-            <FileText size={14} /> Exportar PDF
-          </button>
-        </div>
-      )}
       {sugestoesDosExames.length > 0 && (
         <div style={{ background: "linear-gradient(135deg, var(--brandSoft,#d1f5e8), var(--surface))", border: "1px solid var(--brand)22", borderRadius: 14, padding: "16px 18px" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
@@ -942,8 +939,8 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
             {sugestoesDosExames.map((s) => (
               <button key={s} onClick={async () => {
                 const atual = p.suplementosProtocolo || [];
-                if (!atual.includes(s)) {
-                  await editarPaciente(p.id, { suplementosProtocolo: [...atual, s] });
+                if (!atual.some((it) => (typeof it === "string" ? it : it.nome) === s)) {
+                  await editarPaciente(p.id, { suplementosProtocolo: [...atual, { nome: s, via: "oral", conc: "", concUnidade: "—", dose: "", doseUnidade: "mg" }] });
                 }
               }} style={{ fontSize: 12.5, padding: "5px 12px", borderRadius: 99, background: "var(--surface)", border: "1px solid var(--brand)", color: "var(--brand)", fontWeight: 600, cursor: "pointer" }}>
                 + {s}
@@ -951,19 +948,22 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
             ))}
           </div>
           <div style={{ fontSize: 11, color: "var(--inkFaint)", marginTop: 10, fontStyle: "italic" }}>
-            Clique para adicionar ao protocolo. Conduta sob responsabilidade do médico.
+            Clique para adicionar ao protocolo atual. Conduta sob responsabilidade do médico.
           </div>
         </div>
       )}
 
-      <div className="card" style={{ padding: "18px 20px" }}>
-        <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 14 }}>Protocolo de suplementação</div>
-        <PlanejadorSuplementos
-          valor={p.suplementosProtocolo || []}
-          onChange={async (lista) => await editarPaciente(p.id, { suplementosProtocolo: lista })}
-          sugestoesDepleção={sugestoesDosExames}
-        />
-      </div>
+      <GerenciadorProtocolos
+        protocoloAplicado={p.suplementosProtocolo || []}
+        biblioteca={config.protocolosSuplementacao || []}
+        sugestoesDepleção={sugestoesDosExames}
+        sementeSugerida={protocoloSugerido}
+        onSementeConsumida={() => setProtocoloSugerido(null)}
+        onAplicar={async (itens) => { await editarPaciente(p.id, { suplementosProtocolo: itens }); toast("Protocolo aplicado ao paciente"); }}
+        onSalvarBiblioteca={async (prot) => { const r = await salvarProtocolo(prot); toast("Protocolo salvo na biblioteca"); return r; }}
+        onRemoverBiblioteca={async (id) => { await removerProtocolo(id); toast("Protocolo removido"); }}
+        onExportarPdf={() => baixarPdfSuplemento({ paciente: p, suplementos: p.suplementosProtocolo, config })}
+      />
     </div>
   );
   const gerarPdfPlano = async () => {
@@ -1202,6 +1202,15 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
             </div>
           );
         })}
+      </div>
+
+      {/* PDF do paciente: realocado para baixo da seção de ciclos.
+          Gera o relatório completo do paciente (exporta os ciclos). */}
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 4, marginBottom: 8 }}>
+        <button className="btn btn-primary" style={{ flex: isMobile ? 1 : "none" }}
+          onClick={() => p.ciclos.length ? setModalPdf(true) : toast("Paciente sem ciclos")}>
+          <FileText size={16} /> PDF do paciente
+        </button>
       </div>
       </>)}
 
