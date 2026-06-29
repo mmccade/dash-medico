@@ -12,21 +12,28 @@ import { MEDICAMENTOS, buscarMedicamentos, nutrientesDepletados } from "../lib/m
 export default function DeplecaoMedicamentos({ valor = [], onChange }) {
   const [busca, setBusca] = useState("");
   const [aberto, setAberto] = useState(false);
-  const [paraCima, setParaCima] = useState(false);
+  const [dropdownStyle, setDropdownStyle] = useState({});
   const inputRef = useRef(null);
 
   const resultados = buscarMedicamentos(busca).slice(0, 8);
   const mapa = nutrientesDepletados(valor);
   const nutrientes = Object.entries(mapa).sort((a, b) => b[1].length - a[1].length);
 
-  // Decide se o dropdown abre pra cima ou pra baixo conforme o espaço na viewport.
+  // Calcula posição do dropdown como fixed pra escapar de overflow:hidden no container pai.
   useEffect(() => {
     if (!aberto || !inputRef.current) return;
     const rect = inputRef.current.getBoundingClientRect();
+    const alturaEstimada = Math.min(240, resultados.length * 56 + 16);
     const espacoAbaixo = window.innerHeight - rect.bottom;
-    const alturaEstimada = Math.min(240, resultados.length * 56 + 8);
-    // Abre pra cima se faltar espaço abaixo e houver espaço acima suficiente.
-    setParaCima(espacoAbaixo < alturaEstimada + 16 && rect.top > alturaEstimada);
+    const abrePraCima = espacoAbaixo < alturaEstimada + 24;
+
+    setDropdownStyle(abrePraCima ? {
+      position: "fixed", bottom: window.innerHeight - rect.top + 4,
+      left: rect.left, width: rect.width,
+    } : {
+      position: "fixed", top: rect.bottom + 4,
+      left: rect.left, width: rect.width,
+    });
   }, [aberto, busca, resultados.length]);
 
   const adicionar = (nome) => {
@@ -34,10 +41,6 @@ export default function DeplecaoMedicamentos({ valor = [], onChange }) {
     setBusca(""); setAberto(false);
   };
   const remover = (nome) => onChange(valor.filter((m) => m !== nome));
-
-  const dropdownPos = paraCima
-    ? { bottom: "100%", marginBottom: 4 }
-    : { top: "100%", marginTop: 4 };
 
   return (
     <div>
@@ -54,7 +57,7 @@ export default function DeplecaoMedicamentos({ valor = [], onChange }) {
           style={{ width: "100%", padding: "10px 14px 10px 34px", borderRadius: 10, border: "1px solid var(--line)", background: "var(--surface)", fontSize: 13.5, boxSizing: "border-box" }}
         />
         {aberto && busca && resultados.length > 0 && (
-          <div style={{ position: "absolute", ...dropdownPos, left: 0, right: 0, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.12)", zIndex: 50, maxHeight: 240, overflowY: "auto" }}>
+          <div style={{ ...dropdownStyle, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.12)", zIndex: 9999, maxHeight: 240, overflowY: "auto" }}>
             {resultados.map((m) => (
               <button key={m.nome} onClick={() => adicionar(m.nome)}
                 style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px", textAlign: "left", borderBottom: "1px solid var(--line)" }}
