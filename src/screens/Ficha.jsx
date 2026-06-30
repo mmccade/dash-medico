@@ -5,7 +5,7 @@
 // + InputData em todos os campos de data
 // + PDF de meta batida disponível quando bater
 
-import { useState, useEffect, lazy, Suspense } from "react";
+import { useState, useEffect, useCallback, lazy, Suspense } from "react";
 import { ArrowLeft, Trash2, Stethoscope, FileText, ChevronDown, Pencil, X, Loader2, Check, Trophy, Activity, FlaskConical, ClipboardList, Pill, Target, Clock, GitCompare, Plus, Minus, Sparkles } from "lucide-react";
 // PlanejadorSuplementos: import estático. Protocolo.jsx (importado estaticamente
 // aqui) já o importa de forma estática; o lazy só criava conflito de chunk/TDZ.
@@ -210,7 +210,7 @@ function ModalFiltroPdf({ ciclos, onGerar, onFechar }) {
 }
 
 // ─── Modal editar ciclo ──────────────────────────────────────
-function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
+function ModalEditarCiclo({ ciclo, alturaBase, paciente, config, onSalvar, onFechar }) {
   const [f, setF] = useState({
     ...ciclo,
     data: ciclo.data || "",
@@ -372,7 +372,37 @@ function ModalEditarCiclo({ ciclo, alturaBase, onSalvar, onFechar }) {
             </div>
           </div>
 
-          <Campo label="Suplementação" v={f.suplementacao} on={(v) => set("suplementacao", v)} max={500} />
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6, flexWrap: "wrap", gap: 8 }}>
+              <label style={{ fontSize: 13, fontWeight: 600 }}>Suplementação</label>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                {paciente?.suplementosProtocolo?.length > 0 && (
+                  <button type="button" onClick={() => {
+                    const plano = paciente.suplementosProtocolo.map((item) => formatarItemSupl(item)).join(", ");
+                    set("suplementacao", plano);
+                  }} style={{ fontSize: 12, color: "var(--brand)", fontWeight: 600, display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 8, border: "1px solid var(--brand)", background: "var(--brandSoft)" }}>
+                    ✦ Usar protocolo do paciente
+                  </button>
+                )}
+                {(config?.protocolosSuplementacao?.length > 0) && (
+                  <select
+                    defaultValue=""
+                    onChange={(e) => {
+                      const prot = config.protocolosSuplementacao.find((x) => x.id === e.target.value);
+                      if (prot) set("suplementacao", (prot.itens || []).map((item) => formatarItemSupl(item)).join(", "));
+                      e.target.value = "";
+                    }}
+                    style={{ fontSize: 12, padding: "5px 10px", borderRadius: 8, border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", fontWeight: 600 }}>
+                    <option value="" disabled>✦ Aplicar protocolo salvo…</option>
+                    {config.protocolosSuplementacao.map((prot) => (
+                      <option key={prot.id} value={prot.id}>{prot.nome}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            </div>
+            <Campo label="" v={f.suplementacao} on={(v) => set("suplementacao", v)} max={500} />
+          </div>
           <CampoTextarea label="Colaterais" v={f.colaterais} on={(v) => set("colaterais", v)} max={1000} />
           <CampoTextarea label="Observações" v={f.obs} on={(v) => set("obs", v)} max={2000} />
 
@@ -570,6 +600,16 @@ function ModalEditarPaciente({ p, onSalvar, onFechar }) {
   );
 }
 
+const VIA_TXT = { oral: "VO", sublingual: "SL", sc: "SC", im: "IM", topico: "tópico" };
+function formatarItemSupl(item) {
+  if (typeof item === "string") return item;
+  const partes = [item.nome];
+  if (item.conc && item.concUnidade && item.concUnidade !== "—") partes.push(`${item.conc} ${item.concUnidade}`);
+  if (item.dose) partes.push(`${item.dose} ${item.doseUnidade || item.unidade || "mg"}`);
+  if (item.via && item.via !== "oral") partes.push(VIA_TXT[item.via] || item.via);
+  return partes.join(" ");
+}
+
 function Campo({ label, v, on, max }) {
   return (
     <div className="field">
@@ -621,12 +661,14 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
   const [examesLista, setExamesLista] = useState([]);
 
   // Carrega exames do paciente para timeline, resumo e comparação
-  useEffect(() => {
+  const carregarExamesLista = useCallback(() => {
     if (!user?.uid || !pacienteId) return;
     listarExames(user.uid, pacienteId)
       .then(setExamesLista)
       .catch(() => {});
   }, [user?.uid, pacienteId]);
+
+  useEffect(() => { carregarExamesLista(); }, [carregarExamesLista]);
 
   if (!p) { navegar("pacientes"); return null; }
 
@@ -858,7 +900,7 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
           </button>
         </div>
       )}
-      <Exames pacienteId={p.id} pacienteGenero={genero} pacienteNome={p.nome} navegar={navegar} />
+      <Exames pacienteId={p.id} pacienteGenero={genero} pacienteNome={p.nome} navegar={navegar} onExamesAlterados={carregarExamesLista} />
     </div>
   );
 
@@ -1215,7 +1257,7 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
       </>)}
 
       {editandoCicloIdx !== null && (
-        <ModalEditarCiclo ciclo={p.ciclos[editandoCicloIdx]} alturaBase={p.altura} onSalvar={(d) => editarCiclo(p.id, editandoCicloIdx, d)} onFechar={() => setEditandoCicloIdx(null)} />
+        <ModalEditarCiclo ciclo={p.ciclos[editandoCicloIdx]} alturaBase={p.altura} paciente={p} config={config} onSalvar={(d) => editarCiclo(p.id, editandoCicloIdx, d)} onFechar={() => setEditandoCicloIdx(null)} />
       )}
       {editandoPaciente && (
         <ModalEditarPaciente p={p} onSalvar={(d) => editarPaciente(p.id, d)} onFechar={() => setEditandoPaciente(false)} />
