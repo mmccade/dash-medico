@@ -329,7 +329,7 @@ function ModalVincular({ pacientes, onVincularExistente, onCriarNovo, onFechar, 
   );
 }
 
-export default function Exames({ pacienteId, pacienteGenero = "M", pacienteNome, navegar }) {
+export default function Exames({ pacienteId, pacienteGenero = "M", pacienteNome, navegar, onExamesAlterados }) {
   const { user } = useAuth();
   const { config, pacientes, addPaciente } = useStore();
   const toast = useToast();
@@ -365,6 +365,7 @@ export default function Exames({ pacienteId, pacienteGenero = "M", pacienteNome,
       setAbaAberta(novo.id);
       setModal(false);
       toast("Exame salvo.");
+      onExamesAlterados?.();
     } catch (e) { console.error(e); toast("Erro ao salvar."); }
   };
 
@@ -381,6 +382,7 @@ export default function Exames({ pacienteId, pacienteGenero = "M", pacienteNome,
       await excluirExame(user.uid, pacienteId, eid);
       setExames((prev) => prev.filter((e) => e.id !== eid));
       toast("Exame excluído.");
+      onExamesAlterados?.();
     } catch (e) { console.error(e); toast("Erro ao excluir."); }
   };
 
