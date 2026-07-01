@@ -279,6 +279,44 @@ function CardExame({ exame, genero, aberto, onToggle, onExcluir, onRenomear, exa
       </button>
       {aberto && (
         <div style={{ padding: "4px 20px 20px" }}>
+          {comSugestao.length > 0 && (
+            <div style={{ marginBottom: 16, padding: "14px 16px", background: "linear-gradient(135deg, var(--brandSoft,#d1f5e8), var(--surface))", border: "1px solid var(--brand)", borderRadius: 12 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--brand)", marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+                💊 Sugestões de suplementação baseadas neste exame
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {comSugestao.map((m, i) => {
+                  const s = classificar(m.nome, m.valor, genero);
+                  const sugs = getSugestoes(m.nome, s) || [];
+                  return (
+                    <div key={i} style={{ fontSize: 12.5 }}>
+                      <span style={{ fontWeight: 600 }}>{m.nome}</span>
+                      <span style={{ color: s === "baixo" ? "#9a6700" : "#b91c1c", fontWeight: 600, marginLeft: 6 }}>
+                        {s === "baixo" ? "↓ baixo" : "↑ elevado"}
+                      </span>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 5 }}>
+                        {sugs.map((sug, j) => {
+                          const nomeSup = sug.split(" (")[0].trim();
+                          return (
+                            <button key={j} type="button"
+                              onClick={onAdicionarSuplemento ? () => onAdicionarSuplemento(nomeSup) : undefined}
+                              disabled={!onAdicionarSuplemento}
+                              style={{ fontSize: 11.5, fontWeight: 600, padding: "4px 10px", borderRadius: 99, background: "var(--surface)", color: "var(--brand)", border: "1px solid var(--brand)", cursor: onAdicionarSuplemento ? "pointer" : "default" }}
+                              title={onAdicionarSuplemento ? "Adicionar ao protocolo do paciente" : "Vincule a um paciente para adicionar ao protocolo"}>
+                              {onAdicionarSuplemento ? "+ " : ""}{sug}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{ fontSize: 10.5, color: "var(--inkFaint)", marginTop: 10, fontStyle: "italic" }}>
+                ⚕️ Sugestões de referência. A conduta terapêutica é de responsabilidade exclusiva do médico.
+              </div>
+            </div>
+          )}
           {CATEGORIAS_EXAME.map((cat) => {
             const marcsCat = exame.marcadores?.filter((m) => BIOMARCADORES.find((b) => b.nome === m.nome)?.categoria === cat);
             if (!marcsCat || marcsCat.length === 0) return null;
