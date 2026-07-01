@@ -188,6 +188,10 @@ export const BIOMARCADOR_MAP = Object.fromEntries(BIOMARCADORES.map((b) => [b.no
 /** Retorna sugestões de suplementação para um biomarcador e classificação */
 export function getSugestoes(nome, classificacao) {
   const b = BIOMARCADORES.find((m) => m.nome === nome);
-  if (!b || !classificacao || !b.sugestoes) return null;
-  return b.sugestoes[classificacao] || null;
+  if (!b || !classificacao) return null;
+  // As sugestões ficam dentro de `ideal.sugestoes` na maioria dos marcadores;
+  // aceita também o formato antigo `b.sugestoes` como fallback.
+  const fonte = b.ideal?.sugestoes || b.sugestoes;
+  if (!fonte) return null;
+  return fonte[classificacao] || null;
 }
