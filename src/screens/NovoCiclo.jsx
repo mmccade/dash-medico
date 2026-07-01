@@ -6,7 +6,7 @@ import { useStore } from "../lib/store.jsx";
 import { useToast } from "../lib/toast.jsx";
 import { parseNum } from "../lib/utils.js";
 import { validateCiclo, primeiroErro } from "../lib/validate.js";
-import { InputDecimal, InputInteiro, InputData } from "../components/inputs.jsx";
+import { InputDecimal, InputInteiro, InputData, numeroParaMascara } from "../components/inputs.jsx";
 import SilhuetaAplicacao from "../components/SilhuetaAplicacao.jsx";
 
 function labelMes(iso) {
@@ -36,9 +36,15 @@ export default function NovoCiclo({ pacienteId, navegar }) {
   const p = getPaciente(pacienteId);
 
   const hoje = new Date().toISOString().slice(0, 10);
+  const primeiroCicloDoPaciente = !p || p.ciclos.length === 0;
+  // No primeiro ciclo, puxa o peso já capturado na anamnese (p.pesoInicial)
+  // pra não pedir de novo o mesmo dado.
+  const pesoPrefill = primeiroCicloDoPaciente && p?.pesoInicial != null
+    ? numeroParaMascara(p.pesoInicial, 4, 1)
+    : "";
   const [f, setF] = useState({
     data: hoje,
-    peso: "", gordura: "", massaMagra: "", visceral: "",
+    peso: pesoPrefill, gordura: "", massaMagra: "", visceral: "",
     unidade: "MG", d1: "", d2: "", d3: "", d4: "",
     local: "Casa", localAplicacao: "", medicacao: "", suplementacao: "", colaterais: "", obs: "",
   });
@@ -104,6 +110,13 @@ export default function NovoCiclo({ pacienteId, navegar }) {
           <div className="field">
             <label>Peso (kg) *</label>
             <InputDecimal value={f.peso} onChange={(v) => set("peso", v)} placeholder="109,5" digitos={4} decimais={1} />
+            {(p.pesoInicial != null || p.pesoMeta != null) && (
+              <span style={{ fontSize: 11.5, color: "var(--inkFaint)", marginTop: 5, display: "block" }}>
+                {p.pesoInicial != null && `Peso inicial ${String(p.pesoInicial).replace(".", ",")} kg`}
+                {p.pesoInicial != null && p.pesoMeta != null && " · "}
+                {p.pesoMeta != null && `Meta ${String(p.pesoMeta).replace(".", ",")} kg`}
+              </span>
+            )}
           </div>
           <div className="field">
             <label>% Gordura</label>
