@@ -4,19 +4,23 @@
 //   1. Vista padrão: protocolo aplicado ao paciente + biblioteca de protocolos salvos.
 //   2. "Adicionar novo protocolo" → builder com nome + PlanejadorSuplementos
 //      (via, concentração, dose por item + sinergia/antagonismo).
-//   3. Salva na biblioteca (reutilizável) e aplica ao paciente atual.
+//   3. Salva na biblioteca (reutilizável) e COMBINA com o que já estiver
+//      aplicado ao paciente — dá pra aplicar mais de um protocolo no mesmo
+//      paciente/ciclo (ex: "Suporte GLP-1" + "Pós-bariátrica" juntos).
 //
 // Props:
 //   protocoloAplicado : array de itens atualmente no paciente (p.suplementosProtocolo)
+//   protocolosAplicadosNomes : nomes dos protocolos da biblioteca já combinados no paciente
 //   biblioteca        : array de protocolos salvos (config.protocolosSuplementacao)
 //   sugestoesDepleção : nomes sugeridos pelos exames
-//   onAplicar(itens)  : aplica um conjunto de itens ao paciente
+//   onAplicar(itens, nomeProtocolo)  : combina um conjunto de itens ao paciente (merge, não substitui)
+//   onRemoverItem(nome)  : remove um único item do protocolo aplicado ao paciente
 //   onSalvarBiblioteca(protocolo) : salva/atualiza protocolo na biblioteca (retorna registro)
 //   onRemoverBiblioteca(id)       : remove protocolo da biblioteca
 //   onExportarPdf()   : exporta PDF do protocolo aplicado
 
 import { useState, useEffect } from "react";
-import { Plus, FileText, FolderPlus, Check, X, Pencil, Trash2, Library, ArrowLeft } from "lucide-react";
+import { Plus, FileText, FolderPlus, Check, X, Pencil, Trash2, Library, ArrowLeft, Layers } from "lucide-react";
 import PlanejadorSuplementos from "./PlanejadorSuplementos.jsx";
 
 // Formata um item do protocolo para exibição (independente do PlanejadorSuplementos,
@@ -33,11 +37,13 @@ function resumoItem(it) {
 
 export default function GerenciadorProtocolos({
   protocoloAplicado = [],
+  protocolosAplicadosNomes = [],
   biblioteca = [],
   sugestoesDepleção = [],
   sementeSugerida = null,
   onSementeConsumida,
   onAplicar,
+  onRemoverItem,
   onSalvarBiblioteca,
   onRemoverBiblioteca,
   onExportarPdf,
@@ -87,7 +93,7 @@ export default function GerenciadorProtocolos({
     setSalvando(true);
     try {
       const registro = await onSalvarBiblioteca({ id: editId, nome: nome.trim(), itens });
-      if (aplicar) await onAplicar(registro.itens);
+      if (aplicar) await onAplicar(registro.itens, registro.nome);
       cancelar();
     } finally {
       setSalvando(false);
@@ -126,7 +132,7 @@ export default function GerenciadorProtocolos({
         <div style={{ display: "flex", gap: 10, marginTop: 18, flexWrap: "wrap" }}>
           <button disabled={!nome.trim() || salvando} onClick={() => salvar(true)}
             className="btn btn-primary" style={{ flex: 1, justifyContent: "center", opacity: !nome.trim() ? 0.5 : 1 }}>
-            <Check size={15} /> {salvando ? "Salvando…" : "Salvar e aplicar ao paciente"}
+            <Check size={15} /> {salvando ? "Salvando…" : "Salvar e combinar com o paciente"}
           </button>
           <button disabled={!nome.trim() || salvando} onClick={() => salvar(false)}
             className="btn btn-ghost" style={{ justifyContent: "center", opacity: !nome.trim() ? 0.5 : 1 }}>
@@ -155,18 +161,42 @@ export default function GerenciadorProtocolos({
       {/* Protocolo aplicado ao paciente */}
       <div className="card" style={{ padding: "18px 20px" }}>
         <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 4 }}>Protocolo atual do paciente</div>
+
+        {protocolosAplicadosNomes.length > 0 && (
+          <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 6, marginTop: 8, marginBottom: 4 }}>
+            <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 11.5, color: "var(--inkFaint)" }}>
+              <Layers size={12} /> Combinando:
+            </span>
+            {protocolosAplicadosNomes.map((n) => (
+              <span key={n} style={{ fontSize: 11.5, fontWeight: 600, padding: "3px 9px", borderRadius: 99, background: "var(--brandSoft)", color: "var(--brand)" }}>
+                {n}
+              </span>
+            ))}
+          </div>
+        )}
+
         {protocoloAplicado.length === 0 ? (
           <div style={{ fontSize: 12.5, color: "var(--inkFaint)", padding: "8px 0" }}>
-            Nenhum protocolo aplicado. Crie um novo ou aplique um da biblioteca abaixo.
+            Nenhum protocolo aplicado. Crie um novo ou aplique um da biblioteca abaixo — dá pra aplicar mais de um, eles se combinam.
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 7, marginTop: 10 }}>
-            {protocoloAplicado.map((it, i) => (
-              <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, padding: "8px 12px", background: "var(--surface2)", borderRadius: 9 }}>
-                <Check size={13} color="var(--brand)" style={{ flexShrink: 0 }} />
-                <span>{resumoItem(it)}</span>
-              </div>
-            ))}
+            {protocoloAplicado.map((it, i) => {
+              const nomeItem = typeof it === "string" ? it : it.nome;
+              return (
+                <div key={i} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, fontSize: 13, padding: "8px 12px", background: "var(--surface2)", borderRadius: 9 }}>
+                  <span style={{ display: "flex", alignItems: "center", gap: 8, minWidth: 0 }}>
+                    <Check size={13} color="var(--brand)" style={{ flexShrink: 0 }} />
+                    <span>{resumoItem(it)}</span>
+                  </span>
+                  {onRemoverItem && (
+                    <button onClick={() => onRemoverItem(nomeItem)} style={{ color: "var(--inkFaint)", padding: "3px 6px", borderRadius: 7, flexShrink: 0 }} title="Remover item">
+                      <X size={13} />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
           </div>
         )}
       </div>
@@ -197,9 +227,9 @@ export default function GerenciadorProtocolos({
                     </div>
                   </div>
                   <div style={{ display: "flex", gap: 6, flexShrink: 0 }}>
-                    <button onClick={() => onAplicar(prot.itens || [])}
+                    <button onClick={() => onAplicar(prot.itens || [], prot.nome)}
                       className="btn btn-ghost" style={{ fontSize: 12, gap: 5, padding: "5px 10px", color: "var(--brand)" }}>
-                      <Plus size={13} /> Aplicar
+                      <Plus size={13} /> {protocolosAplicadosNomes.includes(prot.nome) ? "Combinado" : "Combinar"}
                     </button>
                     <button onClick={() => abrirEdicao(prot)}
                       style={{ color: "var(--inkFaint)", padding: "5px 7px", borderRadius: 7 }} title="Editar">
