@@ -13,6 +13,7 @@ import { useToast } from "../lib/toast.jsx";
 import { getAnamnese, salvarAnamnese } from "../services/db-exames.js";
 import { baixarPdfAnamnese } from "../services/pdf-clinico.js";
 import { SECOES_ANAMNESE, anamneseParaPaciente, camposObrigatoriosFaltando } from "../lib/anamnese-schema.js";
+import { ultimoCiclo } from "../lib/utils.js";
 import SeletorPaciente from "../components/SeletorPaciente.jsx";
 import DeplecaoMedicamentos from "../components/DeplecaoMedicamentos.jsx";
 import { InputDecimal, InputInteiro, InputData } from "../components/inputs.jsx";
@@ -214,7 +215,7 @@ function TelaPosCadastro({ paciente, navegar }) {
 
 export default function Anamnese({ pacienteId, pacienteNome, navegar }) {
   const { user } = useAuth();
-  const { pacientes, addPaciente } = useStore();
+  const { pacientes, addPaciente, editarPaciente } = useStore();
   const toast = useToast();
   const { config } = useStore();
   const [dados, setDados] = useState({});
@@ -231,10 +232,24 @@ export default function Anamnese({ pacienteId, pacienteNome, navegar }) {
     if (!user || !pacienteId) { setCarregando(false); return; }
     try {
       const a = await getAnamnese(user.uid, pacienteId);
-      if (a) setDados(a);
+      const paciente = pacientes.find((p) => p.id === pacienteId);
+      // Pré-preenche com o que já existe no cadastro/ciclos do paciente,
+      // sem sobrescrever o que o médico já tiver preenchido na própria anamnese.
+      const auto = {};
+      if (paciente) {
+        if (paciente.idade != null) auto.idade = String(paciente.idade);
+        if (paciente.sexo) auto.sexo = paciente.sexo;
+        if (paciente.altura) auto.altura = String(Math.round(paciente.altura * 100)); // m → cm
+        const uc = paciente.ciclos?.length ? ultimoCiclo(paciente) : null;
+        const pesoAtual = uc?.peso ?? paciente.pesoInicial;
+        if (pesoAtual != null) auto.peso = String(pesoAtual).replace(".", ",");
+        if (paciente.pesoMeta != null) auto.metaPeso = String(paciente.pesoMeta).replace(".", ",");
+        if (paciente.nome) auto.nomeCompleto = paciente.nome;
+      }
+      setDados({ ...auto, ...(a || {}) });
     } catch (e) { console.error(e); toast("Erro ao carregar anamnese."); }
     finally { setCarregando(false); }
-  }, [user, pacienteId]);
+  }, [user, pacienteId, pacientes]);
 
   useEffect(() => { carregar(); }, [carregar]);
 
@@ -245,6 +260,19 @@ export default function Anamnese({ pacienteId, pacienteNome, navegar }) {
     setSalvando(true);
     try {
       await salvarAnamnese(user.uid, pacienteId, dados);
+      // Sincroniza idade/sexo/altura/meta com o cadastro do paciente. O peso
+      // inicial só é atualizado se o paciente ainda não tiver nenhum ciclo
+      // registrado, pra não sobrescrever o peso já medido em consultas.
+      const paciente = pacientes.find((p) => p.id === pacienteId);
+      if (paciente) {
+        const patch = {};
+        if (dados.idade) patch.idade = Number(dados.idade);
+        if (dados.sexo) patch.sexo = dados.sexo;
+        if (dados.altura) patch.altura = +(Number(String(dados.altura).replace(",", ".")) / 100).toFixed(2);
+        if (dados.metaPeso) patch.pesoMeta = Number(String(dados.metaPeso).replace(",", "."));
+        if (dados.peso && !paciente.ciclos?.length) patch.pesoInicial = Number(String(dados.peso).replace(",", "."));
+        if (Object.keys(patch).length) await editarPaciente(pacienteId, patch);
+      }
       toast("Anamnese salva.");
       setSujo(false);
     } catch (e) { console.error(e); toast("Erro ao salvar."); }
