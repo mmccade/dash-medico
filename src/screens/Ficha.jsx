@@ -727,6 +727,12 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
   const meta = p.pesoMeta;
   const u = p.ciclos.length ? ultimoCiclo(p) : null;
   const f0 = p.ciclos.length ? primeiroCiclo(p) : null;
+  // Peso inicial: prioriza o 1º ciclo registrado; sem ciclos ainda, usa o
+  // peso capturado na anamnese (p.pesoInicial).
+  const pesoInicialHeader = f0?.peso ?? p.pesoInicial ?? null;
+  const deltaPesoHeader = pesoInicialHeader != null && u?.peso != null
+    ? +(pesoInicialHeader - u.peso).toFixed(1)
+    : null;
   let progresso = null;
   if (meta && f0 && u && f0.peso > meta) {
     progresso = Math.min(100, Math.round(((f0.peso - u.peso) / (f0.peso - meta)) * 100));
@@ -768,6 +774,13 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", fontSize: 13, color: "var(--inkSoft)" }}>
               <span>{p.idade} anos</span><span>·</span><span>{p.sexo}</span><span>·</span>
               <span>{br(Number(p.altura).toFixed(2))} m</span><span>·</span><span>Início {fmtData(p.inicio)}</span>
+              {pesoInicialHeader != null && <><span>·</span><span>Peso inicial {br(pesoInicialHeader)} kg</span></>}
+              {u && <><span>·</span><span style={{ fontWeight: 600 }}>Peso atual {br(u.peso)} kg</span></>}
+              {deltaPesoHeader != null && deltaPesoHeader !== 0 && (
+                <><span>·</span><span style={{ color: deltaPesoHeader > 0 ? "var(--good)" : "var(--warn)", fontWeight: 600 }}>
+                  {deltaPesoHeader > 0 ? "−" : "+"}{br(Math.abs(deltaPesoHeader))} kg
+                </span></>
+              )}
               {meta && <><span>·</span><span style={{ color: "var(--brand)", fontWeight: 600 }}>Meta: {br(meta)} kg</span></>}
             </div>
           </div>
@@ -900,7 +913,19 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
           </button>
         </div>
       )}
-      <Exames pacienteId={p.id} pacienteGenero={genero} pacienteNome={p.nome} navegar={navegar} onExamesAlterados={carregarExamesLista} />
+      <Exames
+        pacienteId={p.id}
+        pacienteGenero={genero}
+        pacienteNome={p.nome}
+        navegar={navegar}
+        onExamesAlterados={carregarExamesLista}
+        onAdicionarSuplemento={async (nome) => {
+          const atual = p.suplementosProtocolo || [];
+          if (atual.some((it) => (typeof it === "string" ? it : it.nome) === nome)) { toast(`${nome} já está no protocolo.`); return; }
+          await editarPaciente(p.id, { suplementosProtocolo: [...atual, { nome, via: "oral", conc: "", concUnidade: "—", dose: "", doseUnidade: "mg" }] });
+          toast(`${nome} adicionado ao protocolo de suplementação.`);
+        }}
+      />
     </div>
   );
 
@@ -952,7 +977,23 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
     </div>
   );
   const PainelAnamnese = <Anamnese pacienteId={p.id} pacienteNome={p.nome} navegar={navegar} />;
-  const PainelProtocolo = <Protocolo pacienteId={p.id} pacienteNome={p.nome} />;
+  const PainelProtocolo = (
+    <Protocolo
+      pacienteId={p.id}
+      pacienteNome={p.nome}
+      suplementosAtuais={p.suplementosProtocolo || []}
+      onAdicionarSuplemento={async (nome) => {
+        const atual = p.suplementosProtocolo || [];
+        if (atual.some((it) => (typeof it === "string" ? it : it.nome) === nome)) return;
+        await editarPaciente(p.id, { suplementosProtocolo: [...atual, { nome, via: "oral", conc: "", concUnidade: "—", dose: "", doseUnidade: "mg" }] });
+        toast(`${nome} adicionado ao protocolo de suplementação.`);
+      }}
+      onEnviarParaSuplementos={(nomes) => {
+        if (nomes && nomes.length) setProtocoloSugerido(nomes);
+        setAbaAtiva("suplementos");
+      }}
+    />
+  );
 
   // Sugestões de suplemento baseadas nos últimos exames do paciente
   const sugestoesDosExames = (() => {
