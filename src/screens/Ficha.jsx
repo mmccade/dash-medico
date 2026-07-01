@@ -230,6 +230,19 @@ function ModalEditarCiclo({ ciclo, alturaBase, paciente, config, onSalvar, onFec
   const toast = useToast();
   const set = (k, v) => setF((s) => ({ ...s, [k]: v }));
 
+  // Combina protocolo(s) no campo de suplementação sem apagar o que já está
+  // nem duplicar itens — permite empilhar mais de um protocolo no ciclo.
+  const adicionarSupl = (novosItens) => {
+    setF((s) => {
+      const atuais = s.suplementacao
+        ? s.suplementacao.split(",").map((x) => x.trim()).filter(Boolean)
+        : [];
+      const chaves = new Set(atuais.map((x) => x.toLowerCase()));
+      const adicionar = (novosItens || []).filter((x) => x && !chaves.has(x.trim().toLowerCase()));
+      return { ...s, suplementacao: [...atuais, ...adicionar].join(", ") };
+    });
+  };
+
   const pesoNum = parseNum(f.peso);
   const altNum  = parseNum(f.altura);
   const altMetros = altNum >= 100 ? altNum / 100 : altNum;
@@ -377,23 +390,21 @@ function ModalEditarCiclo({ ciclo, alturaBase, paciente, config, onSalvar, onFec
               <label style={{ fontSize: 13, fontWeight: 600 }}>Suplementação</label>
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 {paciente?.suplementosProtocolo?.length > 0 && (
-                  <button type="button" onClick={() => {
-                    const plano = paciente.suplementosProtocolo.map((item) => formatarItemSupl(item)).join(", ");
-                    set("suplementacao", plano);
-                  }} style={{ fontSize: 12, color: "var(--brand)", fontWeight: 600, display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 8, border: "1px solid var(--brand)", background: "var(--brandSoft)" }}>
+                  <button type="button" onClick={() => adicionarSupl(paciente.suplementosProtocolo.map((item) => formatarItemSupl(item)))}
+                    style={{ fontSize: 12, color: "var(--brand)", fontWeight: 600, display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 8, border: "1px solid var(--brand)", background: "var(--brandSoft)" }}>
                     ✦ Usar protocolo do paciente
                   </button>
                 )}
                 {(config?.protocolosSuplementacao?.length > 0) && (
                   <select
-                    defaultValue=""
+                    value=""
                     onChange={(e) => {
                       const prot = config.protocolosSuplementacao.find((x) => x.id === e.target.value);
-                      if (prot) set("suplementacao", (prot.itens || []).map((item) => formatarItemSupl(item)).join(", "));
+                      if (prot) adicionarSupl((prot.itens || []).map((item) => formatarItemSupl(item)));
                       e.target.value = "";
                     }}
                     style={{ fontSize: 12, padding: "5px 10px", borderRadius: 8, border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", fontWeight: 600 }}>
-                    <option value="" disabled>✦ Aplicar protocolo salvo…</option>
+                    <option value="" disabled>✦ Combinar protocolo salvo…</option>
                     {config.protocolosSuplementacao.map((prot) => (
                       <option key={prot.id} value={prot.id}>{prot.nome}</option>
                     ))}
@@ -401,6 +412,9 @@ function ModalEditarCiclo({ ciclo, alturaBase, paciente, config, onSalvar, onFec
                 )}
               </div>
             </div>
+            <span style={{ fontSize: 11, color: "var(--inkFaint)", display: "block", marginBottom: 6 }}>
+              Você pode combinar mais de um protocolo — cada um é adicionado à lista sem apagar o anterior.
+            </span>
             <Campo label="" v={f.suplementacao} on={(v) => set("suplementacao", v)} max={500} />
           </div>
           <CampoTextarea label="Colaterais" v={f.colaterais} on={(v) => set("colaterais", v)} max={1000} />
@@ -928,6 +942,10 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
           if (atual.some((it) => (typeof it === "string" ? it : it.nome) === nome)) { toast(`${nome} já está no protocolo.`); return; }
           await editarPaciente(p.id, { suplementosProtocolo: [...atual, { nome, via: "oral", conc: "", concUnidade: "—", dose: "", doseUnidade: "mg" }] });
           toast(`${nome} adicionado ao protocolo de suplementação.`);
+        }}
+        onCriarPlanoSugerido={(nomes) => {
+          if (nomes && nomes.length) setProtocoloSugerido(nomes);
+          setAbaAtiva("suplementos");
         }}
       />
     </div>
