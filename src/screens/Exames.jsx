@@ -238,6 +238,11 @@ function CardExame({ exame, genero, aberto, onToggle, onExcluir, onRenomear, exa
   const [editandoTitulo, setEditandoTitulo] = useState(false);
   const [novoTitulo, setNovoTitulo] = useState(exame.titulo || "");
   const alteracoes = exame.marcadores?.filter((m) => { const s = classificar(m.nome, m.valor, genero); return s && s !== "normal"; });
+  const comSugestao = (alteracoes || []).filter((m) => {
+    const s = classificar(m.nome, m.valor, genero);
+    const sugs = getSugestoes(m.nome, s);
+    return sugs && sugs.length > 0;
+  });
   return (
     <div className="card" style={{ overflow: "hidden", borderColor: aberto ? "var(--brand)" : "var(--line)" }}>
       <button onClick={onToggle} style={{ width: "100%", display: "flex", alignItems: "center", justifyContent: "space-between", padding: "15px 20px", textAlign: "left" }}>
@@ -265,6 +270,7 @@ function CardExame({ exame, genero, aberto, onToggle, onExcluir, onRenomear, exa
           </span>
           <span style={{ fontSize: 12, color: "var(--inkFaint)" }}>{exame.marcadores?.length || 0} marcadores</span>
           {alteracoes?.length > 0 && <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--warn)", fontWeight: 600 }}><AlertTriangle size={13} /> {alteracoes.length} alterados</span>}
+          {comSugestao.length > 0 && <span style={{ display: "flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--brand)", fontWeight: 600 }}>💊 {comSugestao.length} sugestõe{comSugestao.length > 1 ? "s" : ""} de suplemento</span>}
         </span>
         <div style={{ display: "flex", gap: 4, alignItems: "center", flexShrink: 0 }}>
           {onExcluir && <button onClick={(e) => { e.stopPropagation(); onExcluir(); }} style={{ padding: 6, borderRadius: 7, color: "var(--inkFaint)" }}><Trash2 size={14} /></button>}
