@@ -50,6 +50,7 @@ export const SECOES_ANAMNESE = [
       { k: "queixaPrincipal", label: "Objetivo principal / queixa", tipo: "textarea", obrigatorio: true, placeholder: "Ex: emagrecimento, perder gordura visceral, controle glicêmico…" },
       { k: "tentativasAnteriores", label: "Tentativas anteriores de emagrecimento", tipo: "textarea", placeholder: "Dietas, medicações, cirurgias prévias…" },
       { k: "pesoMaximo", label: "Maior peso que já teve", tipo: "decimal", digitos: 4, decimais: 1, unidade: "kg" },
+      { k: "metaPeso", label: "Meta de peso", tipo: "decimal", digitos: 4, decimais: 1, unidade: "kg" },
       { k: "expectativas", label: "Expectativas do tratamento", tipo: "textarea" },
     ],
   },
@@ -131,6 +132,7 @@ export function anamneseParaPaciente(dados) {
   const alturaCm = dados.altura ? Number(String(dados.altura).replace(",", ".")) : null;
   const alturaM = alturaCm ? +(alturaCm / 100).toFixed(2) : null;
   const pesoNum = dados.peso ? Number(String(dados.peso).replace(",", ".")) : null;
+  const pesoMetaNum = dados.metaPeso ? Number(String(dados.metaPeso).replace(",", ".")) : null;
   return {
     nome: dados.nomeCompleto || "",
     idade: dados.idade ? Number(dados.idade) : null,
@@ -141,6 +143,7 @@ export function anamneseParaPaciente(dados) {
     objetivo: dados.queixaPrincipal || "",
     comorbidades: dados.comorbidades || dados.historicoFamiliar || "Nenhuma relatada",
     pesoInicial: pesoNum,
+    pesoMeta: pesoMetaNum,
     inicio: new Date().toISOString().slice(0, 10),
   };
 }
