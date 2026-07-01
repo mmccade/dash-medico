@@ -1042,11 +1042,25 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
 
       <GerenciadorProtocolos
         protocoloAplicado={p.suplementosProtocolo || []}
+        protocolosAplicadosNomes={p.protocolosAplicadosNomes || []}
         biblioteca={config.protocolosSuplementacao || []}
         sugestoesDepleção={sugestoesDosExames}
         sementeSugerida={protocoloSugerido}
         onSementeConsumida={() => setProtocoloSugerido(null)}
-        onAplicar={async (itens) => { await editarPaciente(p.id, { suplementosProtocolo: itens }); toast("Protocolo aplicado ao paciente"); }}
+        onAplicar={async (itens, nomeProtocolo) => {
+          const atuais = p.suplementosProtocolo || [];
+          const nomesAtuais = atuais.map((i) => (typeof i === "string" ? i : i.nome));
+          const novos = (itens || []).filter((it) => !nomesAtuais.includes(typeof it === "string" ? it : it.nome));
+          const combinado = [...atuais, ...novos];
+          const nomesProtocolos = new Set(p.protocolosAplicadosNomes || []);
+          if (nomeProtocolo) nomesProtocolos.add(nomeProtocolo);
+          await editarPaciente(p.id, { suplementosProtocolo: combinado, protocolosAplicadosNomes: [...nomesProtocolos] });
+          toast(novos.length ? `Protocolo combinado (+${novos.length} ${novos.length === 1 ? "item" : "itens"})` : "Esses itens já estavam no protocolo do paciente.");
+        }}
+        onRemoverItem={async (nome) => {
+          const atuais = p.suplementosProtocolo || [];
+          await editarPaciente(p.id, { suplementosProtocolo: atuais.filter((i) => (typeof i === "string" ? i : i.nome) !== nome) });
+        }}
         onSalvarBiblioteca={async (prot) => { const r = await salvarProtocolo(prot); toast("Protocolo salvo na biblioteca"); return r; }}
         onRemoverBiblioteca={async (id) => { await removerProtocolo(id); toast("Protocolo removido"); }}
         onExportarPdf={() => baixarPdfSuplemento({ paciente: p, suplementos: p.suplementosProtocolo, config })}
