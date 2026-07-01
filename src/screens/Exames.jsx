@@ -43,7 +43,7 @@ function BadgeStatus({ status }) {
   );
 }
 
-function SugestoesMarcador({ nome, status }) {
+function SugestoesMarcador({ nome, status, onAdicionarSuplemento }) {
   if (!status || status === "normal") return null;
   const sugs = getSugestoes(nome, status);
   if (!sugs || !sugs.length) return null;
@@ -54,7 +54,15 @@ function SugestoesMarcador({ nome, status }) {
       </div>
       <ul style={{ margin: 0, padding: "0 0 0 14px", listStyle: "disc" }}>
         {sugs.map((s, i) => (
-          <li key={i} style={{ fontSize: 11.5, color: "#374151", marginBottom: 2 }}>{s}</li>
+          <li key={i} style={{ fontSize: 11.5, color: "#374151", marginBottom: 2 }}>
+            {s}
+            {onAdicionarSuplemento && (
+              <button onClick={() => onAdicionarSuplemento(s.split(" (")[0].trim())}
+                style={{ marginLeft: 8, fontSize: 10.5, fontWeight: 700, color: "var(--brand)", textDecoration: "underline" }}>
+                + adicionar ao protocolo
+              </button>
+            )}
+          </li>
         ))}
       </ul>
       <div style={{ fontSize: 10, color: "#9ca3af", marginTop: 6, fontStyle: "italic" }}>
@@ -226,7 +234,7 @@ function ModalLeitura({ onConfirmar, onFechar, genero = "M" }) {
 }
 
 // ─── Card de exame ─────────────────────────────────────────────
-function CardExame({ exame, genero, aberto, onToggle, onExcluir, onRenomear, exameAnterior }) {
+function CardExame({ exame, genero, aberto, onToggle, onExcluir, onRenomear, exameAnterior, onAdicionarSuplemento }) {
   const [editandoTitulo, setEditandoTitulo] = useState(false);
   const [novoTitulo, setNovoTitulo] = useState(exame.titulo || "");
   const alteracoes = exame.marcadores?.filter((m) => { const s = classificar(m.nome, m.valor, genero); return s && s !== "normal"; });
@@ -290,7 +298,7 @@ function CardExame({ exame, genero, aberto, onToggle, onExcluir, onRenomear, exa
                         <div style={{ fontSize: 14, fontWeight: 600 }}>{m.valor} {bio?.unidade && <span style={{ fontSize: 11, fontWeight: 400, color: "var(--inkFaint)" }}>{bio.unidade}</span>}</div>
                         <div><BadgeStatus status={stAtual} /></div>
                         <div style={{ gridColumn: "1 / -1" }}>
-                          <SugestoesMarcador nome={m.nome} status={stAtual} />
+                          <SugestoesMarcador nome={m.nome} status={stAtual} onAdicionarSuplemento={onAdicionarSuplemento} />
                         </div>
                       </div>
                     );
@@ -329,7 +337,7 @@ function ModalVincular({ pacientes, onVincularExistente, onCriarNovo, onFechar, 
   );
 }
 
-export default function Exames({ pacienteId, pacienteGenero = "M", pacienteNome, navegar, onExamesAlterados }) {
+export default function Exames({ pacienteId, pacienteGenero = "M", pacienteNome, navegar, onExamesAlterados, onAdicionarSuplemento }) {
   const { user } = useAuth();
   const { config, pacientes, addPaciente } = useStore();
   const toast = useToast();
@@ -470,6 +478,7 @@ export default function Exames({ pacienteId, pacienteGenero = "M", pacienteNome,
                 setLista((ls) => ls.map((e) => e.id === exame.id ? { ...e, titulo: novoTitulo } : e));
               }}
               exameAnterior={global ? null : listaExibida[idx + 1] || null}
+              onAdicionarSuplemento={global ? null : onAdicionarSuplemento}
             />
           ))}
         </div>
