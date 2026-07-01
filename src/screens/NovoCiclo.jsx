@@ -210,38 +210,47 @@ export default function NovoCiclo({ pacienteId, navegar }) {
             <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", position: "relative" }}>
               {p?.suplementosProtocolo?.length > 0 && (
                 <button type="button" onClick={() => adicionarSupl(p.suplementosProtocolo.map((item) => formatarItemSupl(item)))}
-                  style={{ fontSize: 12, color: "var(--brand)", fontWeight: 600, display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 8, border: "1px solid var(--brand)", background: "var(--brandSoft)" }}>
+                  style={{ fontSize: 12, color: "var(--brand)", fontWeight: 600, display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", borderRadius: 8, border: "1px solid var(--brand)", background: "var(--surface)", cursor: "pointer" }}>
                   ✦ Usar protocolo do paciente
                 </button>
               )}
               {(config?.protocolosSuplementacao?.length > 0) && (
                 <div style={{ position: "relative" }}>
                   <button type="button" onClick={() => setMenuProtocolos((v) => !v)}
-                    style={{ fontSize: 12, padding: "5px 10px", borderRadius: 8, border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", fontWeight: 600, display: "flex", alignItems: "center", gap: 5 }}>
+                    style={{ fontSize: 12, padding: "5px 10px", borderRadius: 8, border: "1px solid var(--line)", background: "var(--surface)", color: "var(--ink)", fontWeight: 600, display: "flex", alignItems: "center", gap: 5, cursor: "pointer" }}>
                     ✦ Combinar protocolo salvo… ▾
                   </button>
                   {menuProtocolos && (
-                    <div style={{ position: "absolute", top: "calc(100% + 4px)", right: 0, zIndex: 50, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.12)", minWidth: 220, maxHeight: 260, overflowY: "auto", padding: 4 }}>
-                      {config.protocolosSuplementacao.map((prot) => (
-                        <button key={prot.id} type="button"
-                          onClick={() => { adicionarSupl((prot.itens || []).map((item) => formatarItemSupl(item))); setMenuProtocolos(false); }}
-                          style={{ display: "block", width: "100%", textAlign: "left", fontSize: 12.5, padding: "8px 12px", borderRadius: 7, color: "var(--ink)", background: "transparent" }}
-                          onMouseOver={(e) => e.currentTarget.style.background = "var(--brandSoft)"}
-                          onMouseOut={(e) => e.currentTarget.style.background = "transparent"}>
-                          + {prot.nome}
-                          <span style={{ display: "block", fontSize: 11, color: "var(--inkFaint)", marginTop: 1 }}>
-                            {(prot.itens || []).length} {(prot.itens || []).length === 1 ? "item" : "itens"}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
+                    <>
+                      <div onClick={() => setMenuProtocolos(false)} style={{ position: "fixed", inset: 0, zIndex: 40 }} />
+                      <div style={{ position: "absolute", top: "calc(100% + 4px)", right: 0, zIndex: 50, background: "var(--surface)", border: "1px solid var(--line)", borderRadius: 10, boxShadow: "0 8px 24px rgba(0,0,0,0.12)", minWidth: 220, maxHeight: 260, overflowY: "auto", padding: 4 }}>
+                        {config.protocolosSuplementacao.map((prot) => (
+                          <button key={prot.id} type="button"
+                            onClick={() => { adicionarSupl((prot.itens || []).map((item) => formatarItemSupl(item))); setMenuProtocolos(false); }}
+                            style={{ display: "block", width: "100%", textAlign: "left", fontSize: 12.5, padding: "8px 12px", borderRadius: 7, color: "var(--ink)", background: "transparent", cursor: "pointer" }}
+                            onMouseOver={(e) => e.currentTarget.style.background = "var(--brandSoft)"}
+                            onMouseOut={(e) => e.currentTarget.style.background = "transparent"}>
+                            + {prot.nome}
+                            <span style={{ display: "block", fontSize: 11, color: "var(--inkFaint)", marginTop: 1 }}>
+                              {(prot.itens || []).length} {(prot.itens || []).length === 1 ? "item" : "itens"}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </>
                   )}
                 </div>
+              )}
+              {f.suplementacao && (
+                <button type="button" onClick={() => set("suplementacao", "")}
+                  style={{ fontSize: 12, color: "var(--inkFaint)", fontWeight: 600, padding: "4px 10px", borderRadius: 8, border: "1px solid var(--line)", background: "var(--surface)", cursor: "pointer" }}>
+                  Limpar
+                </button>
               )}
             </div>
           </div>
           <span style={{ fontSize: 11, color: "var(--inkFaint)", display: "block", marginBottom: 6 }}>
-            Você pode combinar mais de um protocolo — cada um é adicionado à lista sem apagar o anterior.
+            Você pode combinar mais de um protocolo — cada um é adicionado à lista sem apagar o anterior. O campo abaixo é editável.
           </span>
           <CampoTexto label="" v={f.suplementacao} on={(v) => set("suplementacao", v)} ph="Ex: vitamina D 5.000 UI, magnésio quelato…" max={500} />
         </div>
