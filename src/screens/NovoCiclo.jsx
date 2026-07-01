@@ -31,7 +31,7 @@ function formatarItemSupl(item) {
 }
 
 export default function NovoCiclo({ pacienteId, navegar }) {
-  const { getPaciente, addCiclo, config } = useStore();
+  const { getPaciente, addCiclo, editarPaciente, config } = useStore();
   const toast = useToast();
   const p = getPaciente(pacienteId);
 
@@ -45,6 +45,7 @@ export default function NovoCiclo({ pacienteId, navegar }) {
   const [f, setF] = useState({
     data: hoje,
     peso: pesoPrefill, gordura: "", massaMagra: "", visceral: "",
+    metaPeso: p?.pesoMeta ? numeroParaMascara(p.pesoMeta, 4, 1) : "",
     unidade: "MG", d1: "", d2: "", d3: "", d4: "",
     local: "Casa", localAplicacao: "", medicacao: "", suplementacao: "", colaterais: "", obs: "",
   });
@@ -80,6 +81,10 @@ export default function NovoCiclo({ pacienteId, navegar }) {
     setSalvando(true);
     try {
       await addCiclo(p.id, data);
+      const novaMeta = parseNum(f.metaPeso) || null;
+      if (novaMeta !== (p.pesoMeta ?? null)) {
+        await editarPaciente(p.id, { pesoMeta: novaMeta });
+      }
       toast("Ciclo salvo");
       navegar("ficha", p.id);
     } catch (e) {
@@ -117,6 +122,13 @@ export default function NovoCiclo({ pacienteId, navegar }) {
                 {p.pesoMeta != null && `Meta ${String(p.pesoMeta).replace(".", ",")} kg`}
               </span>
             )}
+          </div>
+          <div className="field">
+            <label>Meta de peso (kg)</label>
+            <InputDecimal value={f.metaPeso} onChange={(v) => set("metaPeso", v)} placeholder="70,0" digitos={4} decimais={1} />
+            <span style={{ fontSize: 11.5, color: "var(--inkFaint)", marginTop: 5, display: "block" }}>
+              Opcional — atualiza a meta do paciente.
+            </span>
           </div>
           <div className="field">
             <label>% Gordura</label>
