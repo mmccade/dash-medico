@@ -234,7 +234,7 @@ function ModalLeitura({ onConfirmar, onFechar, genero = "M" }) {
 }
 
 // ─── Card de exame ─────────────────────────────────────────────
-function CardExame({ exame, genero, aberto, onToggle, onExcluir, onRenomear, exameAnterior, onAdicionarSuplemento }) {
+function CardExame({ exame, genero, aberto, onToggle, onExcluir, onRenomear, exameAnterior, onAdicionarSuplemento, onCriarPlanoSugerido }) {
   const [editandoTitulo, setEditandoTitulo] = useState(false);
   const [novoTitulo, setNovoTitulo] = useState(exame.titulo || "");
   const alteracoes = exame.marcadores?.filter((m) => { const s = classificar(m.nome, m.valor, genero); return s && s !== "normal"; });
@@ -312,6 +312,28 @@ function CardExame({ exame, genero, aberto, onToggle, onExcluir, onRenomear, exa
                   );
                 })}
               </div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
+                {onAdicionarSuplemento && (
+                  <button type="button"
+                    onClick={() => {
+                      const nomes = [...new Set(comSugestao.flatMap((m) => (getSugestoes(m.nome, classificar(m.nome, m.valor, genero)) || []).map((s) => s.split(" (")[0].trim())))];
+                      nomes.forEach((n) => onAdicionarSuplemento(n));
+                    }}
+                    className="btn btn-primary" style={{ fontSize: 12.5, gap: 6 }}>
+                    + Adicionar todas ao protocolo do paciente
+                  </button>
+                )}
+                {onCriarPlanoSugerido && (
+                  <button type="button"
+                    onClick={() => {
+                      const nomes = [...new Set(comSugestao.flatMap((m) => (getSugestoes(m.nome, classificar(m.nome, m.valor, genero)) || []).map((s) => s.split(" (")[0].trim())))];
+                      onCriarPlanoSugerido(nomes);
+                    }}
+                    className="btn btn-ghost" style={{ fontSize: 12.5, gap: 6, color: "var(--brand)" }}>
+                    ✦ Criar novo plano de suplementação
+                  </button>
+                )}
+              </div>
               <div style={{ fontSize: 10.5, color: "var(--inkFaint)", marginTop: 10, fontStyle: "italic" }}>
                 ⚕️ Sugestões de referência. A conduta terapêutica é de responsabilidade exclusiva do médico.
               </div>
@@ -381,7 +403,7 @@ function ModalVincular({ pacientes, onVincularExistente, onCriarNovo, onFechar, 
   );
 }
 
-export default function Exames({ pacienteId, pacienteGenero = "M", pacienteNome, navegar, onExamesAlterados, onAdicionarSuplemento }) {
+export default function Exames({ pacienteId, pacienteGenero = "M", pacienteNome, navegar, onExamesAlterados, onAdicionarSuplemento, onCriarPlanoSugerido }) {
   const { user } = useAuth();
   const { config, pacientes, addPaciente } = useStore();
   const toast = useToast();
@@ -523,6 +545,7 @@ export default function Exames({ pacienteId, pacienteGenero = "M", pacienteNome,
               }}
               exameAnterior={global ? null : listaExibida[idx + 1] || null}
               onAdicionarSuplemento={global ? null : onAdicionarSuplemento}
+              onCriarPlanoSugerido={global ? null : onCriarPlanoSugerido}
             />
           ))}
         </div>
