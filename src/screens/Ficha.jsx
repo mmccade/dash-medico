@@ -781,7 +781,11 @@ export default function Ficha({ pacienteId, navegar, abaInicial }) {
                   {deltaPesoHeader > 0 ? "−" : "+"}{br(Math.abs(deltaPesoHeader))} kg
                 </span></>
               )}
-              {meta && <><span>·</span><span style={{ color: "var(--brand)", fontWeight: 600 }}>Meta: {br(meta)} kg</span></>}
+              {meta ? (
+                <><span>·</span><span style={{ color: "var(--brand)", fontWeight: 600 }}>Meta: {br(meta)} kg</span></>
+              ) : (
+                <><span>·</span><button onClick={() => setEditandoPaciente(true)} style={{ color: "var(--brand)", fontWeight: 600, textDecoration: "underline" }}>+ Definir meta de peso</button></>
+              )}
             </div>
           </div>
         </div>
