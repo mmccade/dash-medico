@@ -20,10 +20,10 @@ export const CATEGORIAS_EXAME = [
 // null = sem limite naquele lado (ex: ">90")
 export const BIOMARCADORES = [
   // ── Avaliação Sanguínea ──────────────────────────────────────
-  { nome: "Hemácias",              categoria: "Avaliação Sanguínea",    refTexto: "4,5 a 6",         ideal: { M: [5.0, 5.5], F: [4.5, 5.5] }, unidade: "mi/µL" },
+  { nome: "Hemácias",              categoria: "Avaliação Sanguínea",    refTexto: "4,5 a 6",         ideal: { M: [5.0, 5.5], F: [4.5, 5.5] , sugestoes: { baixo: ["Ferro bisglicinato", "Vitamina B12", "Folato ativo", "Vitamina C (cofator absorção ferro)"], alto: null } }, unidade: "mi/µL" },
   { nome: "Hemoglobina",           categoria: "Avaliação Sanguínea",    refTexto: "13–17 / 12–15,5", ideal: { M: [14.0, 16.0], F: [13.5, 15.5] , sugestoes: { baixo: ["Ferro bisglicinato", "Vitamina B12", "Folato ativo", "Vitamina C (cofator absorção ferro)"], alto: null } }, unidade: "g/dL",
     interpretacao: { baixo: "Investigar possível anemia, aumentar ingestão de ferro, revisar alimentação.", alto: "Avaliar sinais de desidratação, considerar causas pulmonares ou cardíacas." } },
-  { nome: "Hematócrito",           categoria: "Avaliação Sanguínea",    refTexto: "39–52 / 36–47",   ideal: { M: [42, 48], F: [39, 46] }, unidade: "%",
+  { nome: "Hematócrito",           categoria: "Avaliação Sanguínea",    refTexto: "39–52 / 36–47",   ideal: { M: [42, 48], F: [39, 46] , sugestoes: { baixo: ["Ferro bisglicinato", "Vitamina B12", "Folato ativo", "Vitamina C (cofator absorção ferro)"], alto: null } }, unidade: "%",
     interpretacao: { baixo: "Pode indicar anemia ou deficiência nutricional; revisar alimentação.", alto: "Pode sugerir desidratação; aumentar ingestão de líquidos." } },
   { nome: "VCM",                   categoria: "Avaliação Sanguínea",    refTexto: "80–98",            ideal: { M: [88, 92], F: [88, 92] }, unidade: "fL" },
   { nome: "HCM",                   categoria: "Avaliação Sanguínea",    refTexto: "26–34",            ideal: { M: [27, 33], F: [28, 32] }, unidade: "pg" },
@@ -109,10 +109,10 @@ export const BIOMARCADORES = [
     interpretacao: { baixo: "Pode indicar baixa reserva das células beta e risco de hiperglicemia.", alto: "Pode indicar hiperinsulinemia por resistência à insulina." } },
 
   // ── Avaliação Hepática ───────────────────────────────────────
-  { nome: "TGO",                  categoria: "Avaliação Hepática",      refTexto: "< 35 U/L",         ideal: { M: [15, 25], F: [15, 25] }, unidade: "U/L" },
-  { nome: "TGP",                  categoria: "Avaliação Hepática",      refTexto: "< 35 U/L",         ideal: { M: [15, 25], F: [15, 25] }, unidade: "U/L",
+  { nome: "TGO",                  categoria: "Avaliação Hepática",      refTexto: "< 35 U/L",         ideal: { M: [15, 25], F: [15, 25] , sugestoes: { baixo: null, alto: ["NAC (N-acetilcisteína)", "Silimarina (extrato de cardo mariano)", "Colina", "Vitamina E"] } }, unidade: "U/L" },
+  { nome: "TGP",                  categoria: "Avaliação Hepática",      refTexto: "< 35 U/L",         ideal: { M: [15, 25], F: [15, 25] , sugestoes: { baixo: null, alto: ["NAC (N-acetilcisteína)", "Silimarina (extrato de cardo mariano)", "Colina", "Vitamina E"] } }, unidade: "U/L",
     interpretacao: { alto: "Pode indicar lesão hepática; evitar álcool, revisar medicamentos e suplementos." } },
-  { nome: "Gama GT",              categoria: "Avaliação Hepática",      refTexto: "8–78 U/L",         ideal: { M: [null, 16], F: [null, 16] }, unidade: "U/L",
+  { nome: "Gama GT",              categoria: "Avaliação Hepática",      refTexto: "8–78 U/L",         ideal: { M: [null, 16], F: [null, 16] , sugestoes: { baixo: null, alto: ["NAC (N-acetilcisteína)", "Silimarina (extrato de cardo mariano)", "Glutationa (ou precursores)"] } }, unidade: "U/L",
     interpretacao: { alto: "Pode indicar alteração hepática ou uso excessivo de álcool." } },
   { nome: "PCR",                  categoria: "Avaliação Hepática",      refTexto: "< 2 mg/L",         ideal: { M: [null, 1], F: [null, 1] , sugestoes: { baixo: null, alto: ["Ômega-3 EPA+DHA (2–4 g/dia)", "Vitamina D3", "Curcumina com piperina", "CoQ10 (antioxidante)"] } }, unidade: "mg/L",
     interpretacao: { alto: "Indica processo inflamatório agudo; identificar possíveis focos de inflamação." } },
@@ -123,7 +123,7 @@ export const BIOMARCADORES = [
     interpretacao: { baixo: "Pode indicar desnutrição ou problemas hepáticos; melhorar ingestão de proteínas." } },
 
   // ── Avaliação Nutricional ────────────────────────────────────
-  { nome: "Vitamina A (Retinol)", categoria: "Avaliação Nutricional",   refTexto: "0,3–0,7 mg/L",    ideal: { M: [null, 0.5], F: [null, 0.5] }, unidade: "mg/L" },
+  { nome: "Vitamina A (Retinol)", categoria: "Avaliação Nutricional",   refTexto: "0,3–0,7 mg/L",    ideal: { M: [null, 0.5], F: [null, 0.5] , sugestoes: { baixo: ["Vitamina A (retinol ou betacaroteno)", "Zinco quelato (cofator de transporte)"], alto: null } }, unidade: "mg/L" },
   { nome: "Vitamina B12",         categoria: "Avaliação Nutricional",   refTexto: "300–900 ng/L",     ideal: { M: [500, 1200], F: [500, 1200] , sugestoes: { baixo: ["Vitamina B12 (metilcobalamina 1.000–5.000 mcg/dia)", "Folato ativo (metilfolato)", "Vitamina B6 (P5P)"], alto: null } }, unidade: "ng/L",
     interpretacao: { baixo: "Pode causar anemia ou perda de memória; ajustar dieta, avaliar suplementação." } },
   { nome: "Ácido Fólico (B9)",    categoria: "Avaliação Nutricional",   refTexto: "> 5 ng/mL",       ideal: { M: [12, 17], F: [12, 17] , sugestoes: { baixo: ["Folato ativo (metilfolato 400–800 mcg/dia)", "Vitamina B12", "Vitamina B6 (P5P)"], alto: null } }, unidade: "ng/mL" },
